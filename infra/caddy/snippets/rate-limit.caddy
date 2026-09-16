@@ -1,0 +1,35 @@
+(rate_limit_zones) {
+	rate_limit {
+		distributed {
+			read_interval 5s
+			write_interval 5s
+		}
+
+		zone sh {
+			match {
+				path /sh/*
+			}
+			key {http.request.remote.host}
+			events 30
+			window 1m
+		}
+
+		zone api {
+			match {
+				path /api/*
+			}
+			key {http.request.remote.host}
+			events 60
+			window 1m
+		}
+
+		zone rest {
+			match {
+				not path /sh/* /api/*
+			}
+			key {http.request.remote.host}
+			events 120
+			window 1m
+		}
+	}
+}

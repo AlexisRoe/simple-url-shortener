@@ -1,0 +1,55 @@
+"""Unified application error hierarchy.
+
+Every error raised deliberately by application code inherits from
+:class:`AppError`, giving the whole codebase (and the API's error
+responses) a single, predictable shape: a human-readable message, an
+HTTP status code, and a short machine-readable code.
+"""
+
+from __future__ import annotations
+
+
+class AppError(Exception):
+    """Base class for all application-raised errors.
+
+    Args:
+        message: Human-readable description of what went wrong.
+        status_code: HTTP status code to use when this error is turned
+            into an API response.
+        code: Short, machine-readable identifier for the error type,
+            stable across releases (used by API clients).
+    """
+
+    def __init__(self, message: str, *, status_code: int = 500, code: str = "app_error") -> None:
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+        self.code = code
+
+
+class ConfigurationError(AppError):
+    """Raised when required configuration is missing or fails validation."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=500, code="configuration_error")
+
+
+class RedisConnectionError(AppError):
+    """Raised when the connection to the Redis/Valkey server fails."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=503, code="redis_connection_error")
+
+
+class UnauthorizedError(AppError):
+    """Raised when a request to a protected endpoint lacks valid credentials."""
+
+    def __init__(self, message: str = "Missing or invalid bearer token.") -> None:
+        super().__init__(message, status_code=401, code="unauthorized")
+
+
+class FeatureNotImplementedError(AppError):
+    """Raised by stub endpoints whose logic has not been implemented yet."""
+
+    def __init__(self, message: str = "This endpoint is not implemented yet.") -> None:
+        super().__init__(message, status_code=501, code="not_implemented")
