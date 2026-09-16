@@ -32,6 +32,23 @@ services:
     depends_on:
       - valkyr
     restart: unless-stopped
+    # Compose's healthcheck gates the "healthy" status other services can
+    # depend_on and surfaces in `docker ps` -- that's a readiness concern
+    # (can this instance serve traffic right now?), so it's wired to
+    # /health/readyz rather than /health/livez. No curl/wget in this
+    # slim image, so the check is a plain Python urllib request.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://localhost:8000/health/readyz', timeout=2).status == 200 else 1)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
   valkyr:
     image: valkey/valkey:8-alpine@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1

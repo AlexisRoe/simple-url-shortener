@@ -1,6 +1,17 @@
 # simple-url-shortener
 A simple url shortener build in Python using Redis
 
+## Health checks
+
+- `GET /health/livez` -- liveness (Kubernetes-style, `-z` suffix by
+  convention). Process-only, no dependency checks; an orchestrator should
+  restart the container only when this fails.
+- `GET /health/readyz` -- readiness. Checks Redis/Valkey; returns 503 when
+  unreachable so the instance is pulled out of rotation without being
+  restarted. `docker-compose.yml`'s `fastapi` healthcheck uses this one.
+- `GET /status` -- human-facing app identity + dependency snapshot, kept
+  for backwards compatibility. Not intended for orchestrator probes.
+
 ## Observability
 
 Every request is assigned a request ID (from an incoming `X-Request-ID`
