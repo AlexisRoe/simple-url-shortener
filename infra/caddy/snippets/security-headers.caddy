@@ -1,4 +1,14 @@
 (security_headers) {
+	# Every request body this app expects is a small JSON object (a URL
+	# string and an optional TTL/variant); reject anything grossly larger
+	# before it reaches FastAPI. Kept in sync with
+	# app.core.constants.MAX_REQUEST_BODY_BYTES, which enforces the same
+	# limit inside the app itself for requests that bypass Caddy (e.g.
+	# local development).
+	request_body {
+		max_size 16KB
+	}
+
 	header {
 		# Force HTTPS for future requests to this host, including subdomains.
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

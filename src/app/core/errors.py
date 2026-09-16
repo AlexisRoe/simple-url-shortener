@@ -116,3 +116,10 @@ class RedirectNotFoundError(AppError):
 
     def __init__(self, message: str = "Redirect not found.") -> None:
         super().__init__(message, status_code=404, code="redirect_not_found")
+
+
+class PayloadTooLargeError(AppError):
+    """Raised when a request body exceeds :data:`app.core.constants.MAX_REQUEST_BODY_BYTES`."""
+
+    def __init__(self, message: str = "Request body is too large.") -> None:
+        super().__init__(message, status_code=413, code="payload_too_large")

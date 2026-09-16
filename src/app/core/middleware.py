@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 from fastapi import Request, Response
 
 from app.core.config import get_settings
-from app.core.errors import InsufficientScopeError, TokenExpiredError, UnauthorizedError
+from app.core.constants import MAX_REQUEST_BODY_BYTES
+from app.core.errors import InsufficientScopeError, PayloadTooLargeError, TokenExpiredError, UnauthorizedError
 from app.core.logging import get_logger
 from app.core.request_context import generate_request_id, reset_request_id, set_request_id
 from app.core.responses import app_error_response
@@ -19,6 +20,69 @@ auth_logger = get_logger("auth")
 
 API_PATH_PREFIX = "/api"
 REQUEST_ID_HEADER = "X-Request-ID"
+
+
+async def limit_request_body_size(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Reject request bodies larger than :data:`MAX_REQUEST_BODY_BYTES`.
+
+    Every body this app expects is a small JSON object (a URL string and
+    an optional TTL/variant), so anything past the configured limit is
+    rejected before it reaches route handlers. Caddy enforces the same
+    limit at the edge (see ``infra/caddy/snippets/security-headers.caddy``);
+    this is a second, independent check for requests that reach the app
+    directly (e.g. local development without Caddy in front).
+
+    Checks the declared ``Content-Length`` first as a cheap early
+    rejection, then falls back to counting bytes as the body is actually
+    read, since a client can omit ``Content-Length`` or send chunked
+    transfer-encoding.
+
+    Args:
+        request: The incoming HTTP request.
+        call_next: The next handler in the middleware chain.
+
+    Returns:
+        A 413 error response if the body is too large, otherwise the
+        downstream handler's response.
+    """
+    content_length = request.headers.get("content-length")
+    declared_size = int(content_length) if content_length is not None and content_length.isdigit() else None
+    if declared_size is not None and declared_size > MAX_REQUEST_BODY_BYTES:
+        logger.warning(
+            "Rejected %s %s: declared Content-Length %s exceeds %d bytes",
+            request.method,
+            request.url.path,
+            content_length,
+            MAX_REQUEST_BODY_BYTES,
+        )
+        return app_error_response(PayloadTooLargeError())
+
+    original_stream = request.stream
+    seen_bytes = 0
+
+    async def limited_stream() -> AsyncIterator[bytes]:
+        nonlocal seen_bytes
+        async for chunk in original_stream():
+            seen_bytes += len(chunk)
+            if seen_bytes > MAX_REQUEST_BODY_BYTES:
+                logger.warning(
+                    "Rejected %s %s: streamed body exceeds %d bytes",
+                    request.method,
+                    request.url.path,
+                    MAX_REQUEST_BODY_BYTES,
+                )
+                raise PayloadTooLargeError()
+            yield chunk
+
+    request.stream = limited_stream  # type: ignore[method-assign]
+
+    try:
+        return await call_next(request)
+    except PayloadTooLargeError as exc:
+        return app_error_response(exc)
+
 
 # No metrics/tracing hooks yet (e.g. Prometheus /metrics or OpenTelemetry
 # spans exporting request rate, latency percentiles, error rate). Deemed

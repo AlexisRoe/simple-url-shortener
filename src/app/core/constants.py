@@ -17,3 +17,10 @@ MAX_PAGE_SIZE = 100
 
 # Number of collision retries allowed when generating a new short code.
 MAX_CODE_GENERATION_ATTEMPTS = 5
+
+# Largest request body accepted, in bytes. Every request body handled by
+# this app is a small JSON object (a URL string and an optional TTL/variant),
+# so this is generous rather than tightly sized -- it exists to reject
+# grossly oversized bodies cheaply, not to be a precise limit. Kept in sync
+# with the `request_body max_size` directive in the Caddyfiles.
+MAX_REQUEST_BODY_BYTES = 16 * 1024

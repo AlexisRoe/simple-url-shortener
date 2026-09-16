@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging, get_logger
-from app.core.middleware import add_request_id, log_requests, require_api_token
+from app.core.middleware import add_request_id, limit_request_body_size, log_requests, require_api_token
 from app.core.responses import app_error_response
 from app.routes import api, ping, shortener, status
 from app.services.redis_client import get_redis_client
@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     # most-recently-added middleware first): the request ID must be bound
     # before log_requests/require_api_token run so their log lines are
     # correlated too.
+    app.middleware("http")(limit_request_body_size)
     app.middleware("http")(log_requests)
     app.middleware("http")(require_api_token)
     app.middleware("http")(add_request_id)
