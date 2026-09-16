@@ -17,11 +17,5 @@
     "url": "git+https://github.com/AlexisRoe/simple-url-shortener.git"
   },
   "license": "MIT",
-  "author": "Alexis Roehrling",
-  "scripts": {
-    "sync-version": "scripts/sync-version.sh",
-    "docker:up": "npm run sync-version && docker compose --env-file .env -f infra/docker-compose.yml up -d --build",
-    "docker:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
-    "docker:logs": "docker compose --env-file .env -f infra/docker-compose.yml logs -f"
-  }
+  "author": "Alexis Roehrling"
 }
