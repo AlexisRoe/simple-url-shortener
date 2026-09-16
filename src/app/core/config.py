@@ -9,10 +9,10 @@ directly. Invalid or missing configuration surfaces as a
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, ValidationError
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, ValidationError, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from app.core.errors import ConfigurationError
 
@@ -33,11 +33,37 @@ class Settings(BaseSettings):
 
     default_redirect_url: str = Field(alias="DEFAULT_REDIRECT_URL")
 
+    # Comma-separated list of domains redirects are allowed to target
+    # (e.g. "docs.company.com,tools.company.com"). An empty list disables
+    # the restriction, allowing redirects to any https URL.
+    allowed_redirect_domains: Annotated[list[str], NoDecode] = Field(
+        default_factory=list, alias="ALLOWED_REDIRECT_DOMAINS"
+    )
+
     log_enabled: bool = Field(default=True, alias="LOG_ENABLED")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", alias="LOG_LEVEL"
     )
     log_style: Literal["text", "json"] = Field(default="text", alias="LOG_STYLE")
+
+    @field_validator("allowed_redirect_domains", mode="before")
+    @classmethod
+    def _split_allowed_redirect_domains(cls, value: object) -> object:
+        """Parse the comma-separated ``ALLOWED_REDIRECT_DOMAINS`` env var into a list.
+
+        Args:
+            value: The raw env value (a comma-separated string), or an
+                already-parsed list (e.g. when constructing ``Settings``
+                directly in tests).
+
+        Returns:
+            A list of lowercased, whitespace-trimmed domains, empty
+            entries dropped.
+        """
+        if isinstance(value, str):
+            return [domain.strip().lower() for domain in value.split(",") if domain.strip()]
+
+        return value
 
     @property
     def is_development(self) -> bool:

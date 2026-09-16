@@ -1,6 +1,6 @@
 """Tests for app.core.urls."""
 
-from app.core.urls import is_insecure_http_url, is_valid_ttl_ms, is_valid_url
+from app.core.urls import is_allowed_domain, is_insecure_http_url, is_valid_ttl_ms, is_valid_url
 
 
 def test_is_valid_url_accepts_https_only():
@@ -35,6 +35,26 @@ def test_is_valid_ttl_ms_accepts_none_and_positive_int():
 def test_is_valid_ttl_ms_rejects_zero_and_negative():
     assert not is_valid_ttl_ms(0)
     assert not is_valid_ttl_ms(-1)
+
+
+def test_is_allowed_domain_allows_any_host_when_allowlist_empty():
+    assert is_allowed_domain("https://anything.example", [])
+
+
+def test_is_allowed_domain_accepts_exact_match():
+    assert is_allowed_domain("https://company.com/path", ["company.com"])
+
+
+def test_is_allowed_domain_accepts_subdomain():
+    assert is_allowed_domain("https://docs.company.com", ["company.com"])
+
+
+def test_is_allowed_domain_rejects_unlisted_host():
+    assert not is_allowed_domain("https://evil.com", ["company.com"])
+
+
+def test_is_allowed_domain_rejects_lookalike_suffix():
+    assert not is_allowed_domain("https://notcompany.com", ["company.com"])
 
 
 def test_is_valid_ttl_ms_rejects_non_integer_types():

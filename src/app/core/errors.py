@@ -83,6 +83,13 @@ class InsecureUrlError(AppError):
         super().__init__(message, status_code=400, code="insecure_url")
 
 
+class DomainNotAllowedError(AppError):
+    """Raised when a submitted redirect target URL's host isn't on the allowlist."""
+
+    def __init__(self, message: str = "This domain is not on the allowlist.") -> None:
+        super().__init__(message, status_code=400, code="domain_not_allowed")
+
+
 class InvalidTtlError(AppError):
     """Raised when a submitted TTL (milliseconds) isn't a positive integer."""
 
