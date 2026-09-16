@@ -48,6 +48,20 @@ class UnauthorizedError(AppError):
         super().__init__(message, status_code=401, code="unauthorized")
 
 
+class TokenExpiredError(AppError):
+    """Raised when a bearer token matches a configured token but has expired."""
+
+    def __init__(self, message: str = "This API token has expired.") -> None:
+        super().__init__(message, status_code=401, code="token_expired")
+
+
+class InsufficientScopeError(AppError):
+    """Raised when a valid, unexpired token's role doesn't cover the request."""
+
+    def __init__(self, message: str = "This token's scope does not permit this action.") -> None:
+        super().__init__(message, status_code=403, code="insufficient_scope")
+
+
 class InvalidShortCodeError(AppError):
     """Raised when a short code's format doesn't match a generated code."""
 

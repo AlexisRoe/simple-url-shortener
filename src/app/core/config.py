@@ -8,6 +8,7 @@ directly. Invalid or missing configuration surfaces as a
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Annotated, Literal
 
@@ -29,7 +30,18 @@ class Settings(BaseSettings):
     valkey_host: str = Field(default="valkyr", alias="VALKEY_HOST")
     valkey_port: int = Field(default=6379, alias="VALKEY_PORT")
 
-    api_token: str = Field(alias="API_TOKEN")
+    # Three scoped bearer tokens forming a hierarchy (read < read_write <
+    # delete): a higher-scoped token is also accepted wherever a lower
+    # scope is required. Each carries its own expiry so a stale token
+    # fails loudly (401) rather than remaining valid forever.
+    api_token_read: str = Field(alias="API_TOKEN_READ")
+    api_token_read_expires_at: datetime = Field(alias="API_TOKEN_READ_EXPIRES_AT")
+
+    api_token_read_write: str = Field(alias="API_TOKEN_READ_WRITE")
+    api_token_read_write_expires_at: datetime = Field(alias="API_TOKEN_READ_WRITE_EXPIRES_AT")
+
+    api_token_delete: str = Field(alias="API_TOKEN_DELETE")
+    api_token_delete_expires_at: datetime = Field(alias="API_TOKEN_DELETE_EXPIRES_AT")
 
     default_redirect_url: str = Field(alias="DEFAULT_REDIRECT_URL")
 
@@ -62,6 +74,25 @@ class Settings(BaseSettings):
         """
         if isinstance(value, str):
             return [domain.strip().lower() for domain in value.split(",") if domain.strip()]
+
+        return value
+
+    @field_validator(
+        "api_token_read_expires_at", "api_token_read_write_expires_at", "api_token_delete_expires_at"
+    )
+    @classmethod
+    def _assume_utc_if_naive(cls, value: datetime) -> datetime:
+        """Treat a timezone-naive expiry (e.g. "2026-12-31") as UTC.
+
+        Args:
+            value: The parsed expiry datetime.
+
+        Returns:
+            ``value`` unchanged if already timezone-aware, otherwise
+            ``value`` with UTC attached.
+        """
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
 
         return value
 

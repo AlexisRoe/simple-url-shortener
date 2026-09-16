@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Ensures .env has a real, random API_TOKEN (never the .env.template placeholder)
-# and mirrors it into bruno/environments/local.bru so the Bruno collection works
-# out of the box without ever committing a real secret to git.
+# Ensures .env has three real, random, scoped API tokens (read / read_write /
+# delete), each with an expiry, and mirrors them into
+# bruno/environments/local.bru so the Bruno collection works out of the box
+# without ever committing a real secret to git.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -11,23 +12,48 @@ PLACEHOLDER="change-me-to-a-long-random-secret"
 BRUNO_ENV_FILE="bruno/environments/local.bru"
 BRUNO_ENV_EXAMPLE="bruno/environments/local.bru.example"
 
+# 90 days from now, in UTC, ISO 8601 -- works on both GNU date (Linux) and
+# BSD date (macOS), which take incompatible flags for relative dates.
+default_expiry() {
+	date -u -d "+90 days" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+		|| date -u -v+90d +"%Y-%m-%dT%H:%M:%SZ"
+}
+
 touch "${ENV_FILE}"
-if ! grep -q '^API_TOKEN=' "${ENV_FILE}"; then
-	printf 'API_TOKEN=%s\n' "${PLACEHOLDER}" >>"${ENV_FILE}"
-fi
 
-CURRENT_TOKEN=$(grep '^API_TOKEN=' "${ENV_FILE}" | head -n1 | cut -d= -f2-)
+DELETE_TOKEN=""
 
-if [[ -z "${CURRENT_TOKEN}" || "${CURRENT_TOKEN}" == "${PLACEHOLDER}" ]]; then
-	CURRENT_TOKEN=$(openssl rand -hex 32)
-	sed -i.bak "s/^API_TOKEN=.*/API_TOKEN=${CURRENT_TOKEN}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
-	echo "Generated a new API_TOKEN in ${ENV_FILE}"
-fi
+for ROLE in READ READ_WRITE DELETE; do
+	TOKEN_VAR="API_TOKEN_${ROLE}"
+	EXPIRES_VAR="API_TOKEN_${ROLE}_EXPIRES_AT"
+
+	if ! grep -q "^${TOKEN_VAR}=" "${ENV_FILE}"; then
+		printf '%s=%s\n' "${TOKEN_VAR}" "${PLACEHOLDER}" >>"${ENV_FILE}"
+	fi
+	if ! grep -q "^${EXPIRES_VAR}=" "${ENV_FILE}"; then
+		printf '%s=%s\n' "${EXPIRES_VAR}" "$(default_expiry)" >>"${ENV_FILE}"
+	fi
+
+	CURRENT_TOKEN=$(grep "^${TOKEN_VAR}=" "${ENV_FILE}" | head -n1 | cut -d= -f2-)
+
+	if [[ -z "${CURRENT_TOKEN}" || "${CURRENT_TOKEN}" == "${PLACEHOLDER}" ]]; then
+		CURRENT_TOKEN=$(openssl rand -hex 32)
+		sed -i.bak "s/^${TOKEN_VAR}=.*/${TOKEN_VAR}=${CURRENT_TOKEN}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+		echo "Generated a new ${TOKEN_VAR} in ${ENV_FILE}"
+	fi
+
+	if [[ "${ROLE}" == "DELETE" ]]; then
+		DELETE_TOKEN="${CURRENT_TOKEN}"
+	fi
+done
 
 if [[ ! -f "${BRUNO_ENV_FILE}" ]]; then
 	cp "${BRUNO_ENV_EXAMPLE}" "${BRUNO_ENV_FILE}"
 fi
 
-sed -i.bak "s/^  apiToken: .*/  apiToken: ${CURRENT_TOKEN}/" "${BRUNO_ENV_FILE}" && rm -f "${BRUNO_ENV_FILE}.bak"
+# The Bruno collection authenticates every request with a single
+# {{apiToken}} variable, so point it at the highest-scoped (delete) token,
+# which the read/read_write hierarchy also lets satisfy any request.
+sed -i.bak "s/^  apiToken: .*/  apiToken: ${DELETE_TOKEN}/" "${BRUNO_ENV_FILE}" && rm -f "${BRUNO_ENV_FILE}.bak"
 
-echo "Synced API_TOKEN into ${BRUNO_ENV_FILE}"
+echo "Synced API tokens into ${BRUNO_ENV_FILE}"

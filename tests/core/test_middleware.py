@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.main import create_app
 
@@ -63,3 +63,77 @@ def test_require_api_token_does_not_affect_non_api_routes():
     response = client.get("/ping")
 
     assert response.status_code == 200
+
+
+def test_require_api_token_rejects_expired_token(monkeypatch):
+    """A token that matches but has expired is rejected with 401 token_expired."""
+    monkeypatch.setenv("API_TOKEN_READ_EXPIRES_AT", "2000-01-01T00:00:00Z")
+    get_settings.cache_clear()
+    try:
+        client = TestClient(create_app())
+
+        response = client.get("/api/whoami", headers={"Authorization": "Bearer test-api-token-read"})
+
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "token_expired"
+    finally:
+        monkeypatch.delenv("API_TOKEN_READ_EXPIRES_AT", raising=False)
+        get_settings.cache_clear()
+
+
+def test_require_api_token_rejects_read_token_on_write_request():
+    """A read-scoped token is rejected with 403 when used for a write request."""
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api",
+        json={"url": "https://example.com"},
+        headers={"Authorization": "Bearer test-api-token-read"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "insufficient_scope"
+
+
+def test_require_api_token_allows_read_write_token_on_write_request(monkeypatch):
+    """A read_write-scoped token is accepted for a write request."""
+    from unittest.mock import MagicMock
+
+    fake_redis = MagicMock()
+    fake_redis.exists.return_value = 0
+    pipe = MagicMock()
+    pipe.execute.return_value = ["https://example.com", -1]
+    fake_redis.pipeline.return_value = pipe
+    monkeypatch.setattr("app.routes.api.get_redis_client", lambda: fake_redis)
+
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api",
+        json={"url": "https://example.com"},
+        headers={"Authorization": "Bearer test-api-token-read-write"},
+    )
+
+    assert response.status_code == 201
+
+
+def test_require_api_token_rejects_read_write_token_on_delete_request():
+    """A read_write-scoped token is rejected with 403 on a delete request."""
+    client = TestClient(create_app())
+
+    response = client.delete("/api/some-code", headers={"Authorization": "Bearer test-api-token-read-write"})
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "insufficient_scope"
+
+
+def test_whoami_reports_role_and_expiry():
+    """GET /api/whoami reports the authenticated token's role and remaining validity."""
+    client = TestClient(create_app())
+
+    response = client.get("/api/whoami", headers={"Authorization": "Bearer test-api-token-read"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["role"] == "read"
+    assert body["expires_in_seconds"] > 0

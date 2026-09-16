@@ -8,10 +8,13 @@ protected by the bearer-token auth middleware
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Response
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Query, Request, Response
 
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.schemas.redirect import CreateRedirectBody, CreateVariantBody, UpdateRedirectBody
+from app.schemas.token import WhoAmI
 from app.services.redis_client import get_redis_client
 from app.use_cases.create_redirect import create_redirect as create_redirect_use_case
 from app.use_cases.create_variant import CreatedVariant
@@ -42,6 +45,29 @@ def list_redirects(
         The requested page of redirects, plus pagination metadata.
     """
     return list_redirects_use_case(redis_client=get_redis_client(), page=page, page_size=page_size)
+
+
+@router.get("/whoami", summary="Describe the authenticated token")
+def whoami(request: Request) -> WhoAmI:
+    """Report the role and remaining validity of the request's bearer token.
+
+    Lets a client check, ahead of time, whether its token is close to
+    expiring and needs to be refreshed, rather than finding out via a
+    sudden 401.
+
+    Returns:
+        The token's role (read / read_write / delete), its expiry
+        timestamp, and the number of seconds remaining until then.
+    """
+    role = request.state.token_role
+    expires_at = request.state.token_expires_at
+    remaining = (expires_at - datetime.now(UTC)).total_seconds()
+
+    return WhoAmI(
+        role=role.name.lower(),
+        expires_at=expires_at,
+        expires_in_seconds=max(0, int(remaining)),
+    )
 
 
 @router.post("", summary="Create a redirect", status_code=201)
