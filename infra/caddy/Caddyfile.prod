@@ -17,5 +17,13 @@ import ./snippets/security-headers.caddy
 	import rate_limit_zones
 	import security_headers
 
+	# Only /sh/* (short-code resolution) is meant to be reachable from the
+	# public internet. /api/* (redirect management, bearer-token protected)
+	# and /docs, /openapi.json, /status (disabled outside development
+	# anyway) should never be internet-facing at all -- that boundary must
+	# be enforced at the network/firewall level (e.g. security group,
+	# reverse-proxy ACL, or a separate internal-only listener/DNS name in
+	# front of this same Caddy instance), not by relying on this
+	# application-layer bearer-token check as the only line of defense.
 	reverse_proxy fastapi:8000
 }
