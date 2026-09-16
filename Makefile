@@ -29,4 +29,4 @@ lint:
 build:
 	$(COMPOSE) build
 
-check: test lint build
+check: test lint

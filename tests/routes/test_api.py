@@ -58,38 +58,174 @@ def test_list_redirects_rejects_page_size_over_max(fake_redis):
     assert response.status_code == 422
 
 
-def test_create_redirect_is_not_implemented():
-    """POST /api reports 501 not_implemented."""
-    response = client.post("/api", headers=AUTH_HEADERS, json={})
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "not_implemented"
+def test_create_redirect_returns_201_and_created_entry(fake_redis):
+    fake_redis.exists.return_value = 0
+    pipe = MagicMock()
+    pipe.execute.return_value = ["https://example.com", -1]
+    fake_redis.pipeline.return_value = pipe
+
+    response = client.post("/api", headers=AUTH_HEADERS, json={"url": "https://example.com"})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["url"] == "https://example.com"
+    assert body["ttl"] == -1
+    assert body["variants"] == []
+    fake_redis.set.assert_called_once()
 
 
-def test_get_redirect_is_not_implemented():
-    """GET /api/{code} reports 501 not_implemented."""
-    response = client.get("/api/abc123", headers=AUTH_HEADERS)
-    assert response.status_code == 501
-    assert "abc123" in response.json()["error"]["message"]
+def test_create_redirect_rejects_invalid_url(fake_redis):
+    response = client.post("/api", headers=AUTH_HEADERS, json={"url": "not-a-url"})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_url"
 
 
-def test_update_redirect_is_not_implemented():
-    """PATCH /api/{code} reports 501 not_implemented."""
-    response = client.patch("/api/abc123", headers=AUTH_HEADERS, json={})
-    assert response.status_code == 501
-    assert "abc123" in response.json()["error"]["message"]
+def test_create_redirect_rejects_http_url(fake_redis):
+    response = client.post("/api", headers=AUTH_HEADERS, json={"url": "http://example.com"})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "insecure_url"
 
 
-def test_delete_redirect_is_not_implemented():
-    """DELETE /api/{code} reports 501 not_implemented."""
-    response = client.delete("/api/abc123", headers=AUTH_HEADERS)
-    assert response.status_code == 501
-    assert "abc123" in response.json()["error"]["message"]
+def test_create_redirect_rejects_non_positive_ttl(fake_redis):
+    response = client.post("/api", headers=AUTH_HEADERS, json={"url": "https://example.com", "ttl": 0})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_ttl"
+
+
+def test_create_variant_returns_201(fake_redis):
+    fake_redis.exists.return_value = 1
+    pipe = MagicMock()
+    pipe.execute.return_value = ["https://example.com/v", 500]
+    fake_redis.pipeline.return_value = pipe
+
+    response = client.post(
+        "/api/aB3dE5gH7j/variants",
+        headers=AUTH_HEADERS,
+        json={"url": "https://example.com/v", "variant": "ab", "ttl": 500},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body == {"code": "aB3dE5gH7j", "variant": "ab", "url": "https://example.com/v", "ttl": 500}
+
+
+def test_create_variant_404_when_code_missing(fake_redis):
+    fake_redis.exists.return_value = 0
+
+    response = client.post(
+        "/api/aB3dE5gH7j/variants",
+        headers=AUTH_HEADERS,
+        json={"url": "https://example.com/v", "variant": "ab"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "redirect_not_found"
+
+
+def test_get_redirect_returns_entry(fake_redis):
+    fake_redis.scan_iter.return_value = iter(["sh:aB3dE5gH7j"])
+    pipe = MagicMock()
+    pipe.execute.return_value = ["https://example.com", 100]
+    fake_redis.pipeline.return_value = pipe
+
+    response = client.get("/api/aB3dE5gH7j", headers=AUTH_HEADERS)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "code": "aB3dE5gH7j",
+        "url": "https://example.com",
+        "ttl": 100,
+        "variants": [],
+    }
+
+
+def test_get_redirect_404_when_missing(fake_redis):
+    fake_redis.scan_iter.return_value = iter([])
+
+    response = client.get("/api/aB3dE5gH7j", headers=AUTH_HEADERS)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "redirect_not_found"
+
+
+def test_update_redirect_returns_updated_entry(fake_redis):
+    fake_redis.exists.return_value = 1
+    pipe = MagicMock()
+    pipe.execute.return_value = ["https://example.com/new", -1]
+    fake_redis.pipeline.return_value = pipe
+
+    response = client.patch("/api/aB3dE5gH7j", headers=AUTH_HEADERS, json={"url": "https://example.com/new"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "code": "aB3dE5gH7j",
+        "variant": None,
+        "url": "https://example.com/new",
+        "ttl": -1,
+    }
+
+
+def test_update_redirect_404_when_missing(fake_redis):
+    fake_redis.exists.return_value = 0
+
+    response = client.patch("/api/aB3dE5gH7j", headers=AUTH_HEADERS, json={"url": "https://example.com/new"})
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "redirect_not_found"
+
+
+def test_delete_redirect_returns_204(fake_redis):
+    fake_redis.exists.return_value = 1
+
+    response = client.delete("/api/aB3dE5gH7j", headers=AUTH_HEADERS)
+
+    assert response.status_code == 204
+    fake_redis.delete.assert_called_once_with("sh:aB3dE5gH7j")
+
+
+def test_delete_redirect_with_variant(fake_redis):
+    fake_redis.exists.return_value = 1
+
+    response = client.delete("/api/aB3dE5gH7j", headers=AUTH_HEADERS, params={"variant": "ab"})
+
+    assert response.status_code == 204
+    fake_redis.delete.assert_called_once_with("sh:aB3dE5gH7j:ab")
+
+
+def test_delete_redirect_404_when_missing(fake_redis):
+    fake_redis.exists.return_value = 0
+
+    response = client.delete("/api/aB3dE5gH7j", headers=AUTH_HEADERS)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "redirect_not_found"
+
+
+def test_delete_all_redirects_returns_204(fake_redis):
+    fake_redis.exists.return_value = 1
+    fake_redis.scan_iter.return_value = iter(["sh:aB3dE5gH7j", "sh:aB3dE5gH7j:ab"])
+
+    response = client.delete("/api/aB3dE5gH7j/all", headers=AUTH_HEADERS)
+
+    assert response.status_code == 204
+    fake_redis.delete.assert_called_once_with("sh:aB3dE5gH7j", "sh:aB3dE5gH7j:ab")
+
+
+def test_delete_all_redirects_404_when_missing(fake_redis):
+    fake_redis.exists.return_value = 0
+
+    response = client.delete("/api/aB3dE5gH7j/all", headers=AUTH_HEADERS)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "redirect_not_found"
 
 
 def test_redirect_routes_require_auth():
     """Every /api route rejects requests without a bearer token."""
     assert client.get("/api").status_code == 401
     assert client.post("/api", json={}).status_code == 401
+    assert client.post("/api/abc123/variants", json={}).status_code == 401
     assert client.get("/api/abc123").status_code == 401
     assert client.patch("/api/abc123", json={}).status_code == 401
     assert client.delete("/api/abc123").status_code == 401
+    assert client.delete("/api/abc123/all").status_code == 401

@@ -42,6 +42,44 @@ class RedirectPage:
     page_size: int
 
 
+def group_redirects_by_code(
+    keys: list[str], values: list[str | None], ttls: list[int]
+) -> dict[str, Redirect]:
+    """Group parallel key/value/ttl lists into :class:`Redirect` objects by code.
+
+    The base key (``sh:<code>``) holds a redirect's primary URL, and any
+    ``sh:<code>:<variant>`` keys hold its variant URLs. Keys whose value is
+    None (e.g. expired between scan and fetch) are skipped.
+
+    Args:
+        keys: The scanned Redis keys.
+        values: The value of each key, parallel to ``keys``.
+        ttls: The TTL of each key, parallel to ``keys``.
+
+    Returns:
+        A mapping of short code to its grouped :class:`Redirect`.
+    """
+    prefix = f"{SHORT_CODE_KEY_PREFIX}:"
+    redirects: dict[str, Redirect] = {}
+
+    for key, value, ttl in zip(keys, values, ttls, strict=True):
+        if value is None:
+            continue
+
+        remainder = key[len(prefix) :]
+        parts = remainder.split(":", 1)
+        code = parts[0]
+        redirect = redirects.setdefault(code, Redirect(code=code, url=None, ttl=-1))
+
+        if len(parts) == 1:
+            redirect.url = value
+            redirect.ttl = ttl
+        else:
+            redirect.variants.append(VariantRedirect(variant=parts[1], url=value, ttl=ttl))
+
+    return redirects
+
+
 def list_redirects(*, redis_client: redis.Redis, page: int, page_size: int) -> RedirectPage:
     """List all short-link redirects, grouped by code, with pagination.
 
@@ -63,24 +101,7 @@ def list_redirects(*, redis_client: redis.Redis, page: int, page_size: int) -> R
     """
     keys = scan_short_link_keys(redis_client)
     values, ttls = get_key_values_and_ttls(redis_client, keys)
-
-    prefix = f"{SHORT_CODE_KEY_PREFIX}:"
-    redirects: dict[str, Redirect] = {}
-
-    for key, value, ttl in zip(keys, values, ttls, strict=True):
-        if value is None:
-            continue
-
-        remainder = key[len(prefix) :]
-        parts = remainder.split(":", 1)
-        code = parts[0]
-        redirect = redirects.setdefault(code, Redirect(code=code, url=None, ttl=-1))
-
-        if len(parts) == 1:
-            redirect.url = value
-            redirect.ttl = ttl
-        else:
-            redirect.variants.append(VariantRedirect(variant=parts[1], url=value, ttl=ttl))
+    redirects = group_redirects_by_code(keys, values, ttls)
 
     codes = sorted(redirects)
     total = len(codes)

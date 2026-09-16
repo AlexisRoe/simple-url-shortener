@@ -4,20 +4,25 @@ Covers full CRUD for a single redirect plus an overview listing of all
 existing redirects. All routes here live under ``/api`` and are therefore
 protected by the bearer-token auth middleware
 (:func:`app.core.middleware.require_api_token`).
-
-These are stubs: the persistence layer (backed by Valkey) will be
-implemented in a follow-up.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
-from app.core.errors import FeatureNotImplementedError
+from app.schemas.redirect import CreateRedirectBody, CreateVariantBody, UpdateRedirectBody
 from app.services.redis_client import get_redis_client
-from app.use_cases.list_redirects import RedirectPage
+from app.use_cases.create_redirect import create_redirect as create_redirect_use_case
+from app.use_cases.create_variant import CreatedVariant
+from app.use_cases.create_variant import create_variant as create_variant_use_case
+from app.use_cases.delete_all_redirects import delete_all_redirects as delete_all_redirects_use_case
+from app.use_cases.delete_redirect import delete_redirect as delete_redirect_use_case
+from app.use_cases.get_redirect import get_redirect as get_redirect_use_case
+from app.use_cases.list_redirects import Redirect, RedirectPage
 from app.use_cases.list_redirects import list_redirects as list_redirects_use_case
+from app.use_cases.update_redirect import UpdatedRedirect
+from app.use_cases.update_redirect import update_redirect as update_redirect_use_case
 
 router = APIRouter(prefix="/api", tags=["redirect"])
 
@@ -40,49 +45,110 @@ def list_redirects(
 
 
 @router.post("", summary="Create a redirect", status_code=201)
-def create_redirect() -> None:
+def create_redirect(body: CreateRedirectBody) -> Redirect:
     """Create a new shortened-URL redirect.
 
+    Args:
+        body: The target URL and optional TTL (milliseconds).
+
+    Returns:
+        The newly created redirect.
+
     Raises:
-        FeatureNotImplementedError: Always; persistence is not implemented yet.
+        InvalidUrlError: If the URL isn't a valid absolute http(s) URL.
+        InvalidTtlError: If the TTL is supplied but isn't a positive integer.
     """
-    raise FeatureNotImplementedError("Creating a redirect is not implemented yet.")
+    return create_redirect_use_case(redis_client=get_redis_client(), url=body.url, ttl=body.ttl)
+
+
+@router.post("/{code}/variants", summary="Create a variant for an existing redirect", status_code=201)
+def create_variant(code: str, body: CreateVariantBody) -> CreatedVariant:
+    """Create a variant URL under an existing short code.
+
+    Args:
+        code: The short code the variant belongs to. Must already exist.
+        body: The variant string, target URL, and optional TTL (milliseconds).
+
+    Returns:
+        The newly created variant.
+
+    Raises:
+        RedirectNotFoundError: If ``code`` doesn't exist.
+        InvalidVariantError: If the variant fails format validation.
+        InvalidUrlError: If the URL isn't a valid absolute http(s) URL.
+        InvalidTtlError: If the TTL is supplied but isn't a positive integer.
+    """
+    return create_variant_use_case(
+        redis_client=get_redis_client(), code=code, variant=body.variant, url=body.url, ttl=body.ttl
+    )
 
 
 @router.get("/{code}", summary="Get a single redirect")
-def get_redirect(code: str) -> None:
+def get_redirect(code: str) -> Redirect:
     """Fetch a single redirect by its short code.
 
     Args:
         code: The short code identifying the redirect.
 
+    Returns:
+        The redirect, with its base URL, TTL, and any variants.
+
     Raises:
-        FeatureNotImplementedError: Always; persistence is not implemented yet.
+        RedirectNotFoundError: If ``code`` doesn't exist.
     """
-    raise FeatureNotImplementedError(f"Fetching redirect '{code}' is not implemented yet.")
+    return get_redirect_use_case(redis_client=get_redis_client(), code=code)
 
 
 @router.patch("/{code}", summary="Update a single redirect")
-def update_redirect(code: str) -> None:
-    """Update a single redirect by its short code.
+def update_redirect(code: str, body: UpdateRedirectBody) -> UpdatedRedirect:
+    """Update a single redirect entry: a code, or a code+variant.
 
     Args:
         code: The short code identifying the redirect.
+        body: The new URL and optional TTL (milliseconds), plus an
+            optional variant selecting which entry under ``code`` to
+            update. When omitted, the base code's entry is updated.
+
+    Returns:
+        The updated entry.
 
     Raises:
-        FeatureNotImplementedError: Always; persistence is not implemented yet.
+        InvalidVariantError: If a variant is supplied but fails format
+            validation.
+        InvalidUrlError: If the URL isn't a valid absolute http(s) URL.
+        InvalidTtlError: If the TTL is supplied but isn't a positive integer.
+        RedirectNotFoundError: If the targeted entry doesn't exist.
     """
-    raise FeatureNotImplementedError(f"Updating redirect '{code}' is not implemented yet.")
+    return update_redirect_use_case(
+        redis_client=get_redis_client(), code=code, variant=body.variant, url=body.url, ttl=body.ttl
+    )
 
 
 @router.delete("/{code}", summary="Delete a single redirect", status_code=204)
-def delete_redirect(code: str) -> None:
-    """Delete a single redirect by its short code.
+def delete_redirect(code: str, variant: str | None = None) -> Response:
+    """Delete a single redirect entry: a code, or a code+variant.
+
+    Args:
+        code: The short code identifying the redirect.
+        variant: The optional variant identifying a specific entry under
+            ``code``. When omitted, the base code's entry is deleted.
+
+    Raises:
+        RedirectNotFoundError: If the targeted entry doesn't exist.
+    """
+    delete_redirect_use_case(redis_client=get_redis_client(), code=code, variant=variant)
+    return Response(status_code=204)
+
+
+@router.delete("/{code}/all", summary="Delete a redirect and all of its variants", status_code=204)
+def delete_all_redirects(code: str) -> Response:
+    """Delete a short code's base entry and all of its variant entries at once.
 
     Args:
         code: The short code identifying the redirect.
 
     Raises:
-        FeatureNotImplementedError: Always; persistence is not implemented yet.
+        RedirectNotFoundError: If ``code`` doesn't exist.
     """
-    raise FeatureNotImplementedError(f"Deleting redirect '{code}' is not implemented yet.")
+    delete_all_redirects_use_case(redis_client=get_redis_client(), code=code)
+    return Response(status_code=204)

@@ -7,10 +7,16 @@ import redis
 from app.core.config import Settings
 from app.services.redis_client import (
     build_redis_client,
+    build_short_link_key,
     check_redis_connection,
+    delete_key,
+    delete_keys,
     get_key_values_and_ttls,
     get_short_link_urls,
+    key_exists,
+    scan_keys_for_code,
     scan_short_link_keys,
+    set_short_link,
 )
 
 
@@ -95,3 +101,67 @@ def test_get_key_values_and_ttls_uses_one_pipeline_round_trip():
     assert values == ["https://example.com/a", "https://example.com/b"]
     assert ttls == [100, -1]
     client.pipeline.assert_called_once_with(transaction=False)
+
+
+def test_build_short_link_key_without_variant():
+    assert build_short_link_key("abc0000000") == "sh:abc0000000"
+
+
+def test_build_short_link_key_with_variant():
+    assert build_short_link_key("abc0000000", "ab") == "sh:abc0000000:ab"
+
+
+def test_key_exists_true_and_false():
+    client = MagicMock()
+    client.exists.return_value = 1
+    assert key_exists(client, "sh:abc0000000") is True
+
+    client.exists.return_value = 0
+    assert key_exists(client, "sh:abc0000000") is False
+
+
+def test_set_short_link_without_ttl_omits_px():
+    client = MagicMock()
+    set_short_link(client, "sh:abc0000000", "https://example.com", None)
+    client.set.assert_called_once_with("sh:abc0000000", "https://example.com")
+
+
+def test_set_short_link_with_ttl_passes_px():
+    client = MagicMock()
+    set_short_link(client, "sh:abc0000000", "https://example.com", 500)
+    client.set.assert_called_once_with("sh:abc0000000", "https://example.com", px=500)
+
+
+def test_delete_key_returns_true_when_deleted():
+    client = MagicMock()
+    client.delete.return_value = 1
+    assert delete_key(client, "sh:abc0000000") is True
+
+
+def test_delete_key_returns_false_when_not_found():
+    client = MagicMock()
+    client.delete.return_value = 0
+    assert delete_key(client, "sh:abc0000000") is False
+
+
+def test_delete_keys_returns_deleted_count():
+    client = MagicMock()
+    client.delete.return_value = 2
+    assert delete_keys(client, ["sh:a", "sh:a:x"]) == 2
+    client.delete.assert_called_once_with("sh:a", "sh:a:x")
+
+
+def test_delete_keys_skips_call_for_empty_list():
+    client = MagicMock()
+    assert delete_keys(client, []) == 0
+    client.delete.assert_not_called()
+
+
+def test_scan_keys_for_code_uses_code_prefixed_pattern():
+    client = MagicMock()
+    client.scan_iter.return_value = iter(["sh:abc0000000", "sh:abc0000000:ab"])
+
+    keys = scan_keys_for_code(client, "abc0000000")
+
+    assert keys == ["sh:abc0000000", "sh:abc0000000:ab"]
+    client.scan_iter.assert_called_once_with(match="sh:abc0000000*")

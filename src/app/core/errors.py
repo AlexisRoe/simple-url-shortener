@@ -67,3 +67,31 @@ class FeatureNotImplementedError(AppError):
 
     def __init__(self, message: str = "This endpoint is not implemented yet.") -> None:
         super().__init__(message, status_code=501, code="not_implemented")
+
+
+class InvalidUrlError(AppError):
+    """Raised when a submitted redirect target URL fails format validation."""
+
+    def __init__(self, message: str = "Invalid URL.") -> None:
+        super().__init__(message, status_code=400, code="invalid_url")
+
+
+class InsecureUrlError(AppError):
+    """Raised when a submitted redirect target URL uses plain http instead of https."""
+
+    def __init__(self, message: str = "Only https URLs are allowed.") -> None:
+        super().__init__(message, status_code=400, code="insecure_url")
+
+
+class InvalidTtlError(AppError):
+    """Raised when a submitted TTL (milliseconds) isn't a positive integer."""
+
+    def __init__(self, message: str = "Invalid TTL.") -> None:
+        super().__init__(message, status_code=400, code="invalid_ttl")
+
+
+class RedirectNotFoundError(AppError):
+    """Raised when a requested redirect (code or code+variant) doesn't exist."""
+
+    def __init__(self, message: str = "Redirect not found.") -> None:
+        super().__init__(message, status_code=404, code="redirect_not_found")

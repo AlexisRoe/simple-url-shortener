@@ -40,14 +40,20 @@ def test_require_api_token_blocks_wrong_token():
     assert response.status_code == 401
 
 
-def test_require_api_token_allows_correct_token():
+def test_require_api_token_allows_correct_token(monkeypatch):
     """A request to /api/* with the correct bearer token passes through to the route."""
+    from unittest.mock import MagicMock
+
+    fake_redis = MagicMock()
+    fake_redis.scan_iter.return_value = iter([])
+    monkeypatch.setattr("app.routes.api.get_redis_client", lambda: fake_redis)
+
     client = TestClient(create_app())
 
     response = client.get("/api/some-code", headers={"Authorization": "Bearer test-api-token"})
 
-    # Reaches the (stub) route handler, which reports 501 rather than blocking auth.
-    assert response.status_code == 501
+    # Reaches the route handler (past auth), which reports 404 since the code doesn't exist.
+    assert response.status_code == 404
 
 
 def test_require_api_token_does_not_affect_non_api_routes():
