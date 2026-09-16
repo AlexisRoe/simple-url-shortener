@@ -1,8 +1,11 @@
 {
+	admin off
 	order rate_limit before basicauth
 	storage redis {
 		host {$VALKEY_HOST}
 		port {$VALKEY_PORT}
+		username {$VALKEY_USERNAME}
+		password {$VALKEY_PASSWORD}
 		key_prefix "caddy"
 	}
 }
