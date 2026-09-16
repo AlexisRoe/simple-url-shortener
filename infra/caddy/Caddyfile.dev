@@ -1,0 +1,9 @@
+localhost:8080 {
+	tls /etc/caddy/certs/dev.crt /etc/caddy/certs/dev.key
+
+	reverse_proxy fastapi:8000
+}
+
+:80 {
+	redir https://{host}:8080{uri} permanent
+}

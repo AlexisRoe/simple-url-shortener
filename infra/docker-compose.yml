@@ -1,0 +1,64 @@
+services:
+  fastapi:
+    build:
+      context: ..
+      dockerfile: infra/docker/fastapi.Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-0.0.0}
+    environment:
+      APP_VERSION: ${APP_VERSION:-0.0.0}
+      APP_ENV: ${APP_ENV:-development}
+      VALKEY_HOST: ${VALKEY_HOST:-valkyr}
+      VALKEY_PORT: ${VALKEY_PORT:-6379}
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "src", "--reload"]
+    volumes:
+      - ../src:/app/src
+    networks:
+      - internal
+    expose:
+      - "8000"
+    depends_on:
+      - valkyr
+    restart: unless-stopped
+
+  valkyr:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "/usr/local/etc/valkey/valkyr.conf"]
+    environment:
+      VALKEY_PORT: ${VALKEY_PORT:-6379}
+    volumes:
+      - ./valkyr/valkyr.conf:/usr/local/etc/valkey/valkyr.conf:ro
+      - valkey-data:/data
+    networks:
+      - internal
+    expose:
+      - "6379"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-8080}:${CADDY_HTTPS_CONTAINER_PORT:-8080}"
+    environment:
+      DOMAIN: ${DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./caddy/Caddyfile.${CADDY_ENV:-dev}:/etc/caddy/Caddyfile:ro
+      - ./caddy/certs:/etc/caddy/certs:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - internal
+    depends_on:
+      - fastapi
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  valkey-data:
+  caddy-data:
+  caddy-config:

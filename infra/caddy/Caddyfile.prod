@@ -1,0 +1,9 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	# Automatic HTTPS: Caddy obtains and renews a Let's Encrypt certificate
+	# for {$DOMAIN} and redirects plain HTTP (:80) to HTTPS (:443).
+	reverse_proxy fastapi:8000
+}
