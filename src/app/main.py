@@ -74,6 +74,20 @@ def create_app() -> FastAPI:
         """
         return RedirectResponse(settings.default_redirect_url, status_code=302)
 
+    @app.exception_handler(Exception)
+    async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        """Catch any exception not explicitly handled above.
+
+        Logs the full traceback server-side (never exposed to the client)
+        and renders it in the same unified error shape as :class:`AppError`,
+        so API clients never see a bare unhandled-exception response.
+        """
+        logger.exception("Unhandled %s: %s", type(exc).__name__, exc)
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": "internal_error", "message": "Internal server error."}},
+        )
+
     app.include_router(ping.router)
     app.include_router(status.router)
     app.include_router(shortener.router)

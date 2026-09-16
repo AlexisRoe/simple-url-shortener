@@ -62,3 +62,19 @@ def test_app_error_handler_returns_unified_error_shape(monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {"error": {"code": "redis_connection_error", "message": "nope"}}
+
+
+def test_unhandled_exception_returns_unified_error_shape(monkeypatch):
+    """Any exception not explicitly handled is rendered as a 500 in the same shape."""
+    get_settings.cache_clear()
+    app = create_app()
+
+    @app.get("/__unexpected")
+    def _unexpected() -> None:
+        raise ValueError("something broke")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/__unexpected")
+
+    assert response.status_code == 500
+    assert response.json() == {"error": {"code": "internal_error", "message": "Internal server error."}}
