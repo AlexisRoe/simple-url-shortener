@@ -11,6 +11,7 @@ from functools import lru_cache
 import redis
 
 from app.core.config import Settings, get_settings
+from app.core.constants import SHORT_CODE_KEY_PREFIX
 from app.core.logging import get_logger
 
 logger = get_logger("redis")
@@ -61,3 +62,28 @@ def check_redis_connection(client: redis.Redis | None = None) -> bool:
     except redis.RedisError as exc:
         logger.warning("Redis connection check failed: %s", exc)
         return False
+
+
+def get_short_link_urls(
+    client: redis.Redis, code: str, variant: str | None
+) -> tuple[str | None, str | None]:
+    """Look up the stored redirect targets for a short code and variant.
+
+    Args:
+        client: The Redis/Valkey client to query.
+        code: The short code, already validated by the caller.
+        variant: The optional variant string, or None if not supplied.
+
+    Returns:
+        A ``(variant_url, base_url)`` tuple. ``variant_url`` is always
+        None when ``variant`` is None.
+    """
+    base_key = f"{SHORT_CODE_KEY_PREFIX}:{code}"
+
+    if variant is None:
+        return None, client.get(base_key)
+
+    variant_key = f"{base_key}:{variant}"
+    variant_url, base_url = client.mget(variant_key, base_key)
+    
+    return variant_url, base_url

@@ -31,6 +31,8 @@ class Settings(BaseSettings):
 
     api_token: str = Field(alias="API_TOKEN")
 
+    default_redirect_url: str = Field(alias="DEFAULT_REDIRECT_URL")
+
     log_enabled: bool = Field(default=True, alias="LOG_ENABLED")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", alias="LOG_LEVEL"

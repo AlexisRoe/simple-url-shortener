@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import redis
 
 from app.core.config import Settings
-from app.services.redis_client import build_redis_client, check_redis_connection
+from app.services.redis_client import build_redis_client, check_redis_connection, get_short_link_urls
 
 
 def test_build_redis_client_uses_settings_host_and_port():
@@ -29,3 +29,27 @@ def test_check_redis_connection_false_on_redis_error():
     client = MagicMock()
     client.ping.side_effect = redis.RedisError("connection refused")
     assert check_redis_connection(client) is False
+
+
+def test_get_short_link_urls_uses_get_when_no_variant():
+    """Without a variant, only the base key is looked up via GET."""
+    client = MagicMock()
+    client.get.return_value = "https://example.com/base"
+
+    variant_url, base_url = get_short_link_urls(client, "abc0000000", None)
+
+    assert variant_url is None
+    assert base_url == "https://example.com/base"
+    client.get.assert_called_once_with("sh:abc0000000")
+
+
+def test_get_short_link_urls_uses_mget_when_variant_given():
+    """With a variant, both keys are looked up via MGET in one round trip."""
+    client = MagicMock()
+    client.mget.return_value = ["https://example.com/variant", "https://example.com/base"]
+
+    variant_url, base_url = get_short_link_urls(client, "abc0000000", "ab")
+
+    assert variant_url == "https://example.com/variant"
+    assert base_url == "https://example.com/base"
+    client.mget.assert_called_once_with("sh:abc0000000:ab", "sh:abc0000000")

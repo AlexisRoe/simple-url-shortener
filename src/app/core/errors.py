@@ -48,6 +48,20 @@ class UnauthorizedError(AppError):
         super().__init__(message, status_code=401, code="unauthorized")
 
 
+class InvalidShortCodeError(AppError):
+    """Raised when a short code's format doesn't match a generated code."""
+
+    def __init__(self, message: str = "Invalid short code.") -> None:
+        super().__init__(message, status_code=404, code="invalid_short_code")
+
+
+class InvalidVariantError(AppError):
+    """Raised when a variant query parameter fails format validation."""
+
+    def __init__(self, message: str = "Invalid variant.") -> None:
+        super().__init__(message, status_code=400, code="invalid_variant")
+
+
 class FeatureNotImplementedError(AppError):
     """Raised by stub endpoints whose logic has not been implemented yet."""
 
