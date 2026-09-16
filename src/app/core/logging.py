@@ -16,8 +16,24 @@ import sys
 from datetime import UTC, datetime
 
 from app.core.config import Settings
+from app.core.request_context import get_request_id
 
 _ROOT_LOGGER_NAME = "app"
+
+
+class _RequestIdFilter(logging.Filter):
+    """Attaches the current request ID (if any) to every log record.
+
+    Reads from a contextvar (:func:`app.core.request_context.get_request_id`)
+    rather than a function argument, so every logger call made while
+    handling a request is automatically correlated -- callers don't need
+    to pass a request/trace ID around explicitly.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Set ``record.request_id``, defaulting to ``"-"`` outside a request."""
+        record.request_id = get_request_id() or "-"
+        return True
 
 
 class _JsonFormatter(logging.Formatter):
@@ -36,6 +52,7 @@ class _JsonFormatter(logging.Formatter):
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
+            "request_id": getattr(record, "request_id", "-"),
             "message": record.getMessage(),
         }
         if record.exc_info:
@@ -64,11 +81,14 @@ def configure_logging(settings: Settings) -> None:
         return
 
     handler = logging.StreamHandler(stream=sys.stdout)
+    handler.addFilter(_RequestIdFilter())
 
     if settings.log_style == "json":
         handler.setFormatter(_JsonFormatter())
     else:
-        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s [%(levelname)s] %(name)s [%(request_id)s]: %(message)s")
+        )
 
     root_logger.addHandler(handler)
     root_logger.setLevel(settings.log_level)

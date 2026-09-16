@@ -10,6 +10,7 @@ from fastapi import Request, Response
 from app.core.config import get_settings
 from app.core.errors import InsufficientScopeError, TokenExpiredError, UnauthorizedError
 from app.core.logging import get_logger
+from app.core.request_context import generate_request_id, reset_request_id, set_request_id
 from app.core.responses import app_error_response
 from app.core.security import extract_bearer_token, required_role_for_method, resolve_token
 
@@ -17,6 +18,44 @@ logger = get_logger("http")
 auth_logger = get_logger("auth")
 
 API_PATH_PREFIX = "/api"
+REQUEST_ID_HEADER = "X-Request-ID"
+
+# No metrics/tracing hooks yet (e.g. Prometheus /metrics or OpenTelemetry
+# spans exporting request rate, latency percentiles, error rate). Deemed
+# overkill for this app's current scope; log_requests below already
+# computes per-request duration_ms, which would be the natural value to
+# also export as a histogram if/when this is added. See README.md.
+
+
+async def add_request_id(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    """Correlate every log line emitted while handling a request.
+
+    Uses the incoming ``X-Request-ID`` header if the caller supplied one
+    (useful when this service sits behind another that already assigns
+    one), otherwise generates a new one. The ID is stashed on
+    ``request.state``, bound to a contextvar so every log call made
+    downstream picks it up automatically (see
+    :mod:`app.core.request_context`), and echoed back in the response so
+    the caller can correlate their own logs against it too.
+
+    Args:
+        request: The incoming HTTP request.
+        call_next: The next handler in the middleware chain.
+
+    Returns:
+        The downstream response, with the request ID attached as an
+        ``X-Request-ID`` header.
+    """
+    request_id = request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
+    request.state.request_id = request_id
+    token = set_request_id(request_id)
+    try:
+        response = await call_next(request)
+    finally:
+        reset_request_id(token)
+
+    response.headers[REQUEST_ID_HEADER] = request_id
+    return response
 
 
 async def log_requests(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
