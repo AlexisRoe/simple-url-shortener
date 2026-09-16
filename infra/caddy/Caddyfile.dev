@@ -8,11 +8,13 @@
 }
 
 import ./snippets/rate-limit.caddy
+import ./snippets/security-headers.caddy
 
 localhost:8080 {
 	tls /etc/caddy/certs/dev.crt /etc/caddy/certs/dev.key
 
 	import rate_limit_zones
+	import security_headers
 
 	reverse_proxy fastapi:8000
 }

@@ -9,11 +9,13 @@
 }
 
 import ./snippets/rate-limit.caddy
+import ./snippets/security-headers.caddy
 
 {$DOMAIN} {
 	# Automatic HTTPS: Caddy obtains and renews a Let's Encrypt certificate
 	# for {$DOMAIN} and redirects plain HTTP (:80) to HTTPS (:443).
 	import rate_limit_zones
+	import security_headers
 
 	reverse_proxy fastapi:8000
 }

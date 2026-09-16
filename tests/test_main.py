@@ -20,16 +20,30 @@ def test_docs_available_in_development(monkeypatch):
 
 
 def test_docs_disabled_outside_development(monkeypatch):
-    """OpenAPI docs are not served when APP_ENV is not development."""
+    """OpenAPI docs are not served when APP_ENV is not development.
+
+    Unrouted paths (including /docs when disabled) fall through to the
+    catch-all 404 handler, which redirects to the default redirect URL
+    instead of returning a bare 404.
+    """
     monkeypatch.setenv("APP_ENV", "production")
     get_settings.cache_clear()
     try:
         client = TestClient(create_app())
-        response = client.get("/docs")
-        assert response.status_code == 404
+        response = client.get("/docs", follow_redirects=False)
+        assert response.status_code == 302
+        assert response.headers["location"] == get_settings().default_redirect_url
     finally:
         monkeypatch.delenv("APP_ENV", raising=False)
         get_settings.cache_clear()
+
+
+def test_unknown_path_redirects_to_default_redirect_url():
+    """Any request to an unregistered route redirects to the default URL."""
+    client = TestClient(create_app())
+    response = client.get("/this-route-does-not-exist", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"] == get_settings().default_redirect_url
 
 
 def test_app_error_handler_returns_unified_error_shape(monkeypatch):

@@ -6,7 +6,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.exceptions import HTTPException
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.core.config import get_settings
 from app.core.errors import AppError
@@ -62,6 +63,16 @@ def create_app() -> FastAPI:
         """Translate any :class:`AppError` into a unified JSON error response."""
         logger.error("%s: %s", exc.code, exc.message)
         return app_error_response(exc)
+
+    @app.exception_handler(404)
+    async def handle_not_found(request: Request, exc: HTTPException) -> RedirectResponse:
+        """Send requests to unknown paths to the configured default URL.
+
+        Mirrors the fallback behaviour of :func:`resolve_short_link` for
+        unknown short codes, so the whole app has one consistent "unknown
+        route" experience instead of a bare JSON 404.
+        """
+        return RedirectResponse(settings.default_redirect_url, status_code=302)
 
     app.include_router(ping.router)
     app.include_router(status.router)
