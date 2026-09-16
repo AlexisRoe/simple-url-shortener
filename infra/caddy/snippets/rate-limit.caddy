@@ -1,0 +1,59 @@
+(rate_limit_zones) {
+	rate_limit {
+		distributed {
+			read_interval 5s
+			write_interval 5s
+		}
+
+		zone sh {
+			match {
+				path /sh/*
+			}
+			key {http.request.remote.host}
+			events 30
+			window 1m
+		}
+
+		zone api {
+			match {
+				path /api/*
+			}
+			key {http.request.remote.host}
+			events 60
+			window 1m
+		}
+
+		zone rest {
+			match {
+				not path /sh/* /api/*
+			}
+			key {http.request.remote.host}
+			events 120
+			window 1m
+		}
+	}
+
+	# Advertise each zone's limit/window on every response so clients can
+	# self-throttle before they ever get rate limited (RFC-draft style
+	# RateLimit-Policy header: <limit>;w=<window-seconds>).
+	@sh_zone path /sh/*
+	header @sh_zone RateLimit-Policy "30;w=60"
+
+	@api_zone path /api/*
+	header @api_zone RateLimit-Policy "60;w=60"
+
+	@rest_zone {
+		not path /sh/* /api/*
+	}
+	header @rest_zone RateLimit-Policy "120;w=60"
+
+	# The rate_limit handler already sets an accurate Retry-After header
+	# (seconds remaining in the current window) via caddyhttp.Error, which
+	# survives into this block since it's the same underlying response.
+	# We just add a descriptive JSON body and the remaining headers.
+	handle_errors 429 {
+		header RateLimit-Remaining "0"
+		header Content-Type "application/json"
+		respond `{"error":"rate_limited","message":"Too many requests. Check the Retry-After response header for the number of seconds to wait before retrying.","status":429}` 429
+	}
+}

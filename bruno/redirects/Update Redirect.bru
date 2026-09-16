@@ -1,0 +1,27 @@
+meta {
+  name: Update Redirect
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/api/:code
+  body: json
+  auth: inherit
+}
+
+params:path {
+  code: abc123
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "url": "https://example.com/updated/path",
+    "ttl": 3600000,
+    "variant": null
+  }
+}

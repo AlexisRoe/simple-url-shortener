@@ -1,0 +1,19 @@
+meta {
+  name: Delete Redirect
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/api/:code?variant=b
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~variant: b
+}
+
+params:path {
+  code: abc123
+}

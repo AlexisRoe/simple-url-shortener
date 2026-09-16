@@ -1,0 +1,120 @@
+services:
+  fastapi:
+    build:
+      context: ..
+      dockerfile: infra/docker/fastapi.Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-0.0.0}
+    environment:
+      APP_NAME: ${APP_NAME:-simple-url-shortener}
+      APP_VERSION: ${APP_VERSION:-0.0.0}
+      APP_ENV: ${APP_ENV:-development}
+      VALKEY_HOST: ${VALKEY_HOST:-valkyr}
+      VALKEY_PORT: ${VALKEY_PORT:-6379}
+      VALKEY_USERNAME: ${VALKEY_USERNAME:?VALKEY_USERNAME must be set in .env}
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?VALKEY_PASSWORD must be set in .env}
+      API_TOKEN_READ: ${API_TOKEN_READ:?API_TOKEN_READ must be set in .env}
+      API_TOKEN_READ_EXPIRES_AT: ${API_TOKEN_READ_EXPIRES_AT:?API_TOKEN_READ_EXPIRES_AT must be set in .env}
+      API_TOKEN_READ_WRITE: ${API_TOKEN_READ_WRITE:?API_TOKEN_READ_WRITE must be set in .env}
+      API_TOKEN_READ_WRITE_EXPIRES_AT: ${API_TOKEN_READ_WRITE_EXPIRES_AT:?API_TOKEN_READ_WRITE_EXPIRES_AT must be set in .env}
+      API_TOKEN_DELETE: ${API_TOKEN_DELETE:?API_TOKEN_DELETE must be set in .env}
+      API_TOKEN_DELETE_EXPIRES_AT: ${API_TOKEN_DELETE_EXPIRES_AT:?API_TOKEN_DELETE_EXPIRES_AT must be set in .env}
+      DEFAULT_REDIRECT_URL: ${DEFAULT_REDIRECT_URL:?DEFAULT_REDIRECT_URL must be set in .env}
+      ALLOWED_REDIRECT_DOMAINS: ${ALLOWED_REDIRECT_DOMAINS:-}
+      LOG_ENABLED: ${LOG_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_STYLE: ${LOG_STYLE:-text}
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "src", "--reload"]
+    volumes:
+      - ../src:/app/src
+    networks:
+      - internal
+    expose:
+      - "8000"
+    depends_on:
+      - valkyr
+    restart: unless-stopped
+    # Compose's healthcheck gates the "healthy" status other services can
+    # depend_on and surfaces in `docker ps` -- that's a readiness concern
+    # (can this instance serve traffic right now?), so it's wired to
+    # /health/readyz rather than /health/livez. No curl/wget in this
+    # slim image, so the check is a plain Python urllib request.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://localhost:8000/health/readyz', timeout=2).status == 200 else 1)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  valkyr:
+    image: valkey/valkey:8-alpine@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1
+    # The static config file can't interpolate environment variables, so
+    # credentials are passed as command-line ACL overrides instead: the
+    # default user is disabled outright, and the only usable account is
+    # VALKEY_USERNAME/VALKEY_PASSWORD from .env, with full permissions.
+    command:
+      [
+        "valkey-server",
+        "/usr/local/etc/valkey/valkyr.conf",
+        "--user",
+        "default",
+        "off",
+        "--user",
+        "${VALKEY_USERNAME:?VALKEY_USERNAME must be set in .env}",
+        "on",
+        ">${VALKEY_PASSWORD:?VALKEY_PASSWORD must be set in .env}",
+        "~*",
+        "&*",
+        "+@all",
+      ]
+    environment:
+      VALKEY_PORT: ${VALKEY_PORT:-6379}
+    volumes:
+      - ./valkyr/valkyr.conf:/usr/local/etc/valkey/valkyr.conf:ro
+      - valkey-data:/data
+    networks:
+      - internal
+    expose:
+      - "6379"
+    restart: unless-stopped
+
+  caddy:
+    build:
+      context: ..
+      dockerfile: infra/docker/caddy.Dockerfile
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile.${CADDY_ENV:-dev}", "--adapter", "caddyfile"]
+    ports:
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-8080}:${CADDY_HTTPS_CONTAINER_PORT:-8080}"
+    environment:
+      DOMAIN: ${DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      VALKEY_HOST: ${VALKEY_HOST:-valkyr}
+      VALKEY_PORT: ${VALKEY_PORT:-6379}
+      VALKEY_USERNAME: ${VALKEY_USERNAME:?VALKEY_USERNAME must be set in .env}
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?VALKEY_PASSWORD must be set in .env}
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - internal
+    depends_on:
+      - fastapi
+      - valkyr
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  valkey-data:
+  caddy-data:
+  caddy-config:

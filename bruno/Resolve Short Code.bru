@@ -1,0 +1,19 @@
+meta {
+  name: Resolve Short Code
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/sh/:code?variant=b
+  body: none
+  auth: none
+}
+
+params:query {
+  ~variant: b
+}
+
+params:path {
+  code: _dzO38QmmZ
+}

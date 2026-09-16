@@ -1,0 +1,27 @@
+meta {
+  name: Create Variant
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/:code/variants
+  body: json
+  auth: inherit
+}
+
+params:path {
+  code: abc123
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "url": "https://example.com/variant/path",
+    "ttl": 3600000,
+    "variant": "b"
+  }
+}

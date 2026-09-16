@@ -1,0 +1,27 @@
+{
+	admin off
+	order rate_limit before basicauth
+	storage redis {
+		host {$VALKEY_HOST}
+		port {$VALKEY_PORT}
+		username {$VALKEY_USERNAME}
+		password {$VALKEY_PASSWORD}
+		key_prefix "caddy"
+	}
+}
+
+import ./snippets/rate-limit.caddy
+import ./snippets/security-headers.caddy
+
+localhost:8080 {
+	tls /etc/caddy/certs/dev.crt /etc/caddy/certs/dev.key
+
+	import rate_limit_zones
+	import security_headers
+
+	reverse_proxy fastapi:8000
+}
+
+:80 {
+	redir https://{host}:8080{uri} permanent
+}

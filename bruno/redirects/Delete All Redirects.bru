@@ -1,0 +1,16 @@
+meta {
+  name: Delete All Redirects
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/api/:code/all
+  body: none
+  auth: inherit
+}
+
+params:path {
+  code: abc123
+}
+​

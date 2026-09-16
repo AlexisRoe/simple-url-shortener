@@ -1,0 +1,23 @@
+meta {
+  name: Create Redirect
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "url": "https://example.com/some/path?query=1",
+    "ttl": 3600000
+  }
+}
+​

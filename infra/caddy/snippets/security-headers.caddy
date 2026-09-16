@@ -1,0 +1,34 @@
+(security_headers) {
+	# Every request body this app expects is a small JSON object (a URL
+	# string and an optional TTL/variant); reject anything grossly larger
+	# before it reaches FastAPI. Kept in sync with
+	# app.core.constants.MAX_REQUEST_BODY_BYTES, which enforces the same
+	# limit inside the app itself for requests that bypass Caddy (e.g.
+	# local development).
+	request_body {
+		max_size 16KB
+	}
+
+	header {
+		# Force HTTPS for future requests to this host, including subdomains.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+		# Stop browsers from MIME-sniffing a response into a different
+		# content type than the one declared in Content-Type.
+		X-Content-Type-Options "nosniff"
+
+		# This API is never meant to be framed by another site.
+		X-Frame-Options "DENY"
+
+		# No inline scripts/styles anywhere in this app, and nothing should
+		# ever be framed in or out of it.
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+
+		# Don't leak this origin's full URLs (including short codes) via the
+		# Referer header when a resolved redirect leads to a third-party site.
+		Referrer-Policy "no-referrer"
+
+		# Remove the identifying server header Caddy sets by default.
+		-Server
+	}
+}
