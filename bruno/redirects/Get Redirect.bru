@@ -1,0 +1,15 @@
+meta {
+  name: Get Redirect
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/:code
+  body: none
+  auth: inherit
+}
+
+params:path {
+  code: abc123
+}

@@ -1,0 +1,16 @@
+meta {
+  name: List Redirects
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api?page=1&page_size=20
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 1
+  page_size: 20
+}

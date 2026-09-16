@@ -1,6 +1,6 @@
 {
   "name": "simple-url-shortener",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "a simple url-shortener using Python and Redis",
   "keywords": [
     "python",
@@ -19,7 +19,6 @@
   "license": "MIT",
   "author": "Alexis Roehrling",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "sync-version": "scripts/sync-version.sh",
     "docker:up": "npm run sync-version && docker compose --env-file .env -f infra/docker-compose.yml up -d --build",
     "docker:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
