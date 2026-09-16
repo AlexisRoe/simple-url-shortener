@@ -11,21 +11,32 @@ implemented in a follow-up.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
+from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.core.errors import FeatureNotImplementedError
+from app.services.redis_client import get_redis_client
+from app.use_cases.list_redirects import RedirectPage
+from app.use_cases.list_redirects import list_redirects as list_redirects_use_case
 
 router = APIRouter(prefix="/api", tags=["redirect"])
 
 
 @router.get("", summary="List all redirects")
-def list_redirects() -> None:
-    """Return an overview of all existing redirects.
+def list_redirects(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> RedirectPage:
+    """Return a paginated overview of all existing redirects.
 
-    Raises:
-        FeatureNotImplementedError: Always; persistence is not implemented yet.
+    Args:
+        page: The 1-indexed page number to return.
+        page_size: The maximum number of redirects per page (max 100).
+
+    Returns:
+        The requested page of redirects, plus pagination metadata.
     """
-    raise FeatureNotImplementedError("Listing redirects is not implemented yet.")
+    return list_redirects_use_case(redis_client=get_redis_client(), page=page, page_size=page_size)
 
 
 @router.post("", summary="Create a redirect", status_code=201)

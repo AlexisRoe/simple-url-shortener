@@ -44,7 +44,7 @@ def test_require_api_token_allows_correct_token():
     """A request to /api/* with the correct bearer token passes through to the route."""
     client = TestClient(create_app())
 
-    response = client.get("/api", headers={"Authorization": "Bearer test-api-token"})
+    response = client.get("/api/some-code", headers={"Authorization": "Bearer test-api-token"})
 
     # Reaches the (stub) route handler, which reports 501 rather than blocking auth.
     assert response.status_code == 501

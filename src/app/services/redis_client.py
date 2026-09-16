@@ -85,5 +85,44 @@ def get_short_link_urls(
 
     variant_key = f"{base_key}:{variant}"
     variant_url, base_url = client.mget(variant_key, base_key)
-    
+
     return variant_url, base_url
+
+
+def scan_short_link_keys(client: redis.Redis) -> list[str]:
+    """Return all short-link keys (base and variant) via a non-blocking SCAN.
+
+    Args:
+        client: The Redis/Valkey client to query.
+
+    Returns:
+        Every key matching ``<SHORT_CODE_KEY_PREFIX>:*``, in no particular
+        order.
+    """
+    return list(client.scan_iter(match=f"{SHORT_CODE_KEY_PREFIX}:*"))
+
+
+def get_key_values_and_ttls(client: redis.Redis, keys: list[str]) -> tuple[list[str | None], list[int]]:
+    """Fetch the value and TTL of each given key in a single round trip.
+
+    Args:
+        client: The Redis/Valkey client to query.
+        keys: The keys to fetch.
+
+    Returns:
+        A ``(values, ttls)`` tuple, each parallel to ``keys``. A TTL of
+        ``-1`` means the key has no expiry set; ``-2`` means the key
+        doesn't exist (e.g. it expired between the scan and this call).
+    """
+    if not keys:
+        return [], []
+
+    pipe = client.pipeline(transaction=False)
+    for key in keys:
+        pipe.get(key)
+    for key in keys:
+        pipe.ttl(key)
+
+    results = pipe.execute()
+    midpoint = len(keys)
+    return results[:midpoint], results[midpoint:]

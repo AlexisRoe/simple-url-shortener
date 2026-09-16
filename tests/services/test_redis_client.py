@@ -5,7 +5,13 @@ from unittest.mock import MagicMock
 import redis
 
 from app.core.config import Settings
-from app.services.redis_client import build_redis_client, check_redis_connection, get_short_link_urls
+from app.services.redis_client import (
+    build_redis_client,
+    check_redis_connection,
+    get_key_values_and_ttls,
+    get_short_link_urls,
+    scan_short_link_keys,
+)
 
 
 def test_build_redis_client_uses_settings_host_and_port():
@@ -53,3 +59,39 @@ def test_get_short_link_urls_uses_mget_when_variant_given():
     assert variant_url == "https://example.com/variant"
     assert base_url == "https://example.com/base"
     client.mget.assert_called_once_with("sh:abc0000000:ab", "sh:abc0000000")
+
+
+def test_scan_short_link_keys_matches_prefix():
+    """scan_short_link_keys queries with the sh:* prefix via SCAN."""
+    client = MagicMock()
+    client.scan_iter.return_value = iter(["sh:abc0000000", "sh:abc0000000:ab"])
+
+    keys = scan_short_link_keys(client)
+
+    assert keys == ["sh:abc0000000", "sh:abc0000000:ab"]
+    client.scan_iter.assert_called_once_with(match="sh:*")
+
+
+def test_get_key_values_and_ttls_returns_empty_for_no_keys():
+    """No keys means no pipeline round trip is needed."""
+    client = MagicMock()
+
+    values, ttls = get_key_values_and_ttls(client, [])
+
+    assert values == []
+    assert ttls == []
+    client.pipeline.assert_not_called()
+
+
+def test_get_key_values_and_ttls_uses_one_pipeline_round_trip():
+    """Values and TTLs for all keys are fetched via a single pipeline execute."""
+    client = MagicMock()
+    pipe = MagicMock()
+    pipe.execute.return_value = ["https://example.com/a", "https://example.com/b", 100, -1]
+    client.pipeline.return_value = pipe
+
+    values, ttls = get_key_values_and_ttls(client, ["sh:a", "sh:b"])
+
+    assert values == ["https://example.com/a", "https://example.com/b"]
+    assert ttls == [100, -1]
+    client.pipeline.assert_called_once_with(transaction=False)
