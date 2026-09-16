@@ -219,3 +219,7 @@ __marimo__/
 
 # Local mkcert-generated dev certs (generated via scripts/generate-dev-certs.sh)
 infra/caddy/certs/
+
+# Bruno environment file, generated from local.bru.example and contains the
+# real API_TOKEN (see scripts/generate-api-token.sh)
+bruno/environments/local.bru

@@ -5,6 +5,7 @@ COMPOSE = docker compose --env-file .env -f infra/docker-compose.yml
 initial-setup:
 	@test -f .env || cp .env.template .env
 	@./scripts/sync-version.sh
+	@./scripts/generate-api-token.sh
 	@./scripts/generate-dev-certs.sh
 
 start: initial-setup

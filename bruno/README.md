@@ -15,8 +15,11 @@ Manual test collection for the redirect API, using [Bruno](https://www.usebruno.
 1. Open Bruno and choose **Open Collection**, then select this `bruno/` folder.
 2. Select the **local** environment (top-right environment selector) — it sets
    `baseUrl` (`https://localhost:8080`) and `apiToken`.
-3. Update `apiToken` in the `local` environment to match your `.env`'s `API_TOKEN`
-   if you changed it from the `.env.example` default.
+3. `bruno/environments/local.bru` is gitignored (it holds a real secret) and is
+   generated automatically from `local.bru.example` by `make start` /
+   `make initial-setup` via `scripts/generate-api-token.sh`, which keeps its
+   `apiToken` in sync with `.env`'s `API_TOKEN`. If you haven't run either yet,
+   run `make initial-setup` once before opening Bruno.
 4. Make sure the app stack is running (e.g. `docker compose up` / `make up`, per
    the project's main README) so `https://localhost:8080` is reachable.
 5. All `/api/*` requests use `auth: inherit`, resolving to the collection-level
