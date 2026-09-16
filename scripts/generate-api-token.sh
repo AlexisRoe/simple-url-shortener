@@ -2,7 +2,9 @@
 # Ensures .env has three real, random, scoped API tokens (read / read_write /
 # delete), each with an expiry, and mirrors them into
 # bruno/environments/local.bru so the Bruno collection works out of the box
-# without ever committing a real secret to git.
+# without ever committing a real secret to git. Also ensures .env has a real,
+# random VALKEY_PASSWORD (the ACL credential Valkey/Caddy authenticate with;
+# see infra/valkyr/valkyr.conf).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -20,6 +22,22 @@ default_expiry() {
 }
 
 touch "${ENV_FILE}"
+
+if ! grep -q "^VALKEY_USERNAME=" "${ENV_FILE}"; then
+	printf 'VALKEY_USERNAME=shortener\n' >>"${ENV_FILE}"
+fi
+
+if ! grep -q "^VALKEY_PASSWORD=" "${ENV_FILE}"; then
+	printf 'VALKEY_PASSWORD=%s\n' "${PLACEHOLDER}" >>"${ENV_FILE}"
+fi
+
+CURRENT_VALKEY_PASSWORD=$(grep "^VALKEY_PASSWORD=" "${ENV_FILE}" | head -n1 | cut -d= -f2-)
+
+if [[ -z "${CURRENT_VALKEY_PASSWORD}" || "${CURRENT_VALKEY_PASSWORD}" == "${PLACEHOLDER}" ]]; then
+	CURRENT_VALKEY_PASSWORD=$(openssl rand -hex 32)
+	sed -i.bak "s/^VALKEY_PASSWORD=.*/VALKEY_PASSWORD=${CURRENT_VALKEY_PASSWORD}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+	echo "Generated a new VALKEY_PASSWORD in ${ENV_FILE}"
+fi
 
 DELETE_TOKEN=""
 

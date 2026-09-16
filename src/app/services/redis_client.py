@@ -29,6 +29,8 @@ def build_redis_client(settings: Settings) -> redis.Redis:
     return redis.Redis(
         host=settings.valkey_host,
         port=settings.valkey_port,
+        username=settings.valkey_username,
+        password=settings.valkey_password,
         socket_connect_timeout=2,
         socket_timeout=2,
         decode_responses=True,

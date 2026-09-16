@@ -13,6 +13,8 @@ def test_settings_defaults():
     assert settings.app_env == "development"
     assert settings.valkey_host == "valkyr"
     assert settings.valkey_port == 6379
+    assert settings.valkey_username == "test-valkey-user"
+    assert settings.valkey_password == "test-valkey-password"
     assert settings.log_enabled is True
     assert settings.log_level == "INFO"
     assert settings.log_style == "text"

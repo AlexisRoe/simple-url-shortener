@@ -11,6 +11,8 @@ services:
       APP_ENV: ${APP_ENV:-development}
       VALKEY_HOST: ${VALKEY_HOST:-valkyr}
       VALKEY_PORT: ${VALKEY_PORT:-6379}
+      VALKEY_USERNAME: ${VALKEY_USERNAME:?VALKEY_USERNAME must be set in .env}
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?VALKEY_PASSWORD must be set in .env}
       API_TOKEN_READ: ${API_TOKEN_READ:?API_TOKEN_READ must be set in .env}
       API_TOKEN_READ_EXPIRES_AT: ${API_TOKEN_READ_EXPIRES_AT:?API_TOKEN_READ_EXPIRES_AT must be set in .env}
       API_TOKEN_READ_WRITE: ${API_TOKEN_READ_WRITE:?API_TOKEN_READ_WRITE must be set in .env}
@@ -52,7 +54,25 @@ services:
 
   valkyr:
     image: valkey/valkey:8-alpine@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1
-    command: ["valkey-server", "/usr/local/etc/valkey/valkyr.conf"]
+    # The static config file can't interpolate environment variables, so
+    # credentials are passed as command-line ACL overrides instead: the
+    # default user is disabled outright, and the only usable account is
+    # VALKEY_USERNAME/VALKEY_PASSWORD from .env, with full permissions.
+    command:
+      [
+        "valkey-server",
+        "/usr/local/etc/valkey/valkyr.conf",
+        "--user",
+        "default",
+        "off",
+        "--user",
+        "${VALKEY_USERNAME:?VALKEY_USERNAME must be set in .env}",
+        "on",
+        ">${VALKEY_PASSWORD:?VALKEY_PASSWORD must be set in .env}",
+        "~*",
+        "&*",
+        "+@all",
+      ]
     environment:
       VALKEY_PORT: ${VALKEY_PORT:-6379}
     volumes:
@@ -77,6 +97,8 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:-}
       VALKEY_HOST: ${VALKEY_HOST:-valkyr}
       VALKEY_PORT: ${VALKEY_PORT:-6379}
+      VALKEY_USERNAME: ${VALKEY_USERNAME:?VALKEY_USERNAME must be set in .env}
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?VALKEY_PASSWORD must be set in .env}
     volumes:
       - ./caddy:/etc/caddy:ro
       - caddy-data:/data

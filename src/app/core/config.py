@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     valkey_host: str = Field(default="valkyr", alias="VALKEY_HOST")
     valkey_port: int = Field(default=6379, alias="VALKEY_PORT")
 
+    # Valkey requires authentication (an ACL user with its own password,
+    # not the default user) -- see infra/valkyr/valkyr.conf and the
+    # `--user` overrides in infra/docker-compose.yml. No default is given
+    # for either field so a missing credential fails loudly at startup
+    # rather than silently connecting as an unauthenticated client.
+    valkey_username: str = Field(alias="VALKEY_USERNAME")
+    valkey_password: str = Field(alias="VALKEY_PASSWORD")
+
     # Three scoped bearer tokens forming a hierarchy (read < read_write <
     # delete): a higher-scoped token is also accepted wherever a lower
     # scope is required. Each carries its own expiry so a stale token

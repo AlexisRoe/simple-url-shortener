@@ -29,6 +29,15 @@ def test_build_redis_client_uses_settings_host_and_port():
     assert pool_kwargs["port"] == 1234
 
 
+def test_build_redis_client_uses_settings_credentials():
+    """The client authenticates using the ACL username/password from settings."""
+    settings = Settings(_env_file=None, VALKEY_USERNAME="alice", VALKEY_PASSWORD="s3cret")
+    client = build_redis_client(settings)
+    pool_kwargs = client.connection_pool.connection_kwargs
+    assert pool_kwargs["username"] == "alice"
+    assert pool_kwargs["password"] == "s3cret"
+
+
 def test_check_redis_connection_true_on_successful_ping():
     """check_redis_connection returns True when the client's PING succeeds."""
     client = MagicMock()
