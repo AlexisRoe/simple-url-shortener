@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Syncs APP_VERSION in .env with the version field from package.json.
+# Syncs APP_VERSION in .env with the version field from pyproject.toml.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSION=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
+VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
 
 touch .env
 if grep -q '^APP_VERSION=' .env; then
