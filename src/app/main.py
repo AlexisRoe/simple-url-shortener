@@ -7,12 +7,19 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging, get_logger
-from app.core.middleware import add_request_id, limit_request_body_size, log_requests, require_api_token
+from app.core.middleware import (
+    API_PATH_PREFIX,
+    add_request_id,
+    limit_request_body_size,
+    log_requests,
+    require_api_token,
+)
 from app.core.responses import app_error_response
 from app.routes import api, ping, shortener, status
 from app.services.redis_client import get_redis_client
@@ -49,10 +56,37 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
+        description=(
+            "A small, self-hosted URL shortener. Create short codes that "
+            "302-redirect to a target URL (`POST /api`, `GET /sh/{code}`), "
+            "optionally with several variants of the same code that "
+            "resolve to different URLs depending on a `?variant=` query "
+            "parameter -- e.g. one short link serving different "
+            "audiences or locales rather than a public link-shrinking "
+            "service."
+        ),
         docs_url="/docs" if settings.is_development else None,
         redoc_url=None,
         openapi_url="/openapi.json" if settings.is_development else None,
         lifespan=lifespan,
+        openapi_tags=[
+            {
+                "name": "health",
+                "description": (
+                    "Liveness/readiness probes and app/dependency status, for orchestrators and monitoring."
+                ),
+            },
+            {
+                "name": "shortener",
+                "description": "Public short-code resolution -- redirects a short code to its target URL.",
+            },
+            {
+                "name": "redirect",
+                "description": (
+                    "Management API -- create, read, update and delete redirects. Bearer-token protected."
+                ),
+            },
+        ],
     )
 
     # Registered last so it wraps outermost (Starlette runs the
@@ -98,6 +132,47 @@ def create_app() -> FastAPI:
     app.include_router(status.router)
     app.include_router(shortener.router)
     app.include_router(api.router)
+
+    def custom_openapi() -> dict:
+        """Document the ``/api/*`` bearer-token requirement enforced by :func:`require_api_token`.
+
+        That check runs in HTTP middleware rather than as a FastAPI
+        ``Security`` dependency (it needs to inspect the raw path prefix
+        and attach role/expiry to ``request.state`` before routing), so
+        FastAPI can't infer it automatically -- it has to be added to the
+        generated schema by hand.
+        """
+        if app.openapi_schema:
+            return app.openapi_schema
+
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            tags=app.openapi_tags,
+        )
+        schema.setdefault("components", {}).setdefault("securitySchemes", {})["bearerAuth"] = {
+            "type": "http",
+            "scheme": "bearer",
+            "description": (
+                "One of three configured tokens (read / read_write / delete), sent as "
+                "`Authorization: Bearer <token>`. The token's role must cover the "
+                "request's HTTP method (read: GET; read_write: GET/POST/PATCH; "
+                "delete: all methods) and must not be past its expiry -- see "
+                "`GET /api/whoami` to check a token's role and remaining validity."
+            ),
+        }
+        for path, methods in schema.get("paths", {}).items():
+            if not path.startswith(API_PATH_PREFIX):
+                continue
+            for operation in methods.values():
+                operation["security"] = [{"bearerAuth": []}]
+
+        app.openapi_schema = schema
+        return app.openapi_schema
+
+    app.openapi = custom_openapi
 
     return app
 
