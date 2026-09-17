@@ -24,7 +24,8 @@ def fake_redis(monkeypatch):
 
 
 def test_list_redirects_returns_empty_page_when_no_keys(fake_redis):
-    fake_redis.scan_iter.return_value = iter([])
+    fake_redis.zcount.return_value = 0
+    fake_redis.zrangebyscore.return_value = []
 
     response = client.get("/api", headers=AUTH_HEADERS)
 
@@ -33,6 +34,8 @@ def test_list_redirects_returns_empty_page_when_no_keys(fake_redis):
 
 
 def test_list_redirects_groups_base_and_variant_keys(fake_redis):
+    fake_redis.zcount.return_value = 1
+    fake_redis.zrangebyscore.return_value = ["aB3dE5gH7j"]
     fake_redis.scan_iter.return_value = iter(["sh:aB3dE5gH7j", "sh:aB3dE5gH7j:abc"])
     pipe = MagicMock()
     pipe.execute.return_value = ["https://example.com/base", "https://example.com/variant", 100, 200]

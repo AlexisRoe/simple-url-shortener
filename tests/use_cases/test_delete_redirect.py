@@ -15,6 +15,7 @@ def test_delete_redirect_deletes_base_key():
     delete_redirect(redis_client=client, code="aB3dE5gH7j", variant=None)
 
     client.delete.assert_called_once_with("sh:aB3dE5gH7j")
+    client.zrem.assert_called_once_with("sh:index", "aB3dE5gH7j")
 
 
 def test_delete_redirect_deletes_variant_key():
@@ -24,6 +25,7 @@ def test_delete_redirect_deletes_variant_key():
     delete_redirect(redis_client=client, code="aB3dE5gH7j", variant="ab")
 
     client.delete.assert_called_once_with("sh:aB3dE5gH7j:ab")
+    client.zrem.assert_not_called()
 
 
 def test_delete_redirect_raises_when_missing():

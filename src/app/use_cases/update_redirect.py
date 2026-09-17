@@ -10,6 +10,7 @@ from app.core.codes import is_valid_variant_format
 from app.core.errors import InvalidVariantError, RedirectNotFoundError
 from app.core.logging import get_logger
 from app.services.redis_client import (
+    add_code_to_index,
     build_short_link_key,
     get_key_values_and_ttls,
     key_exists,
@@ -72,6 +73,9 @@ def update_redirect(
         raise RedirectNotFoundError(f"Redirect '{key}' does not exist.")
 
     set_short_link(redis_client, key, url, ttl)
+
+    if variant is None:
+        add_code_to_index(redis_client, code, ttl)
 
     ([_], [actual_ttl]) = get_key_values_and_ttls(redis_client, [key])
     logger.info("Updated entry %r", key)

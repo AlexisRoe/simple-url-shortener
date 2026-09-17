@@ -5,7 +5,12 @@ from __future__ import annotations
 import redis
 
 from app.core.logging import get_logger
-from app.services.redis_client import build_short_link_key, get_key_values_and_ttls, set_short_link
+from app.services.redis_client import (
+    add_code_to_index,
+    build_short_link_key,
+    get_key_values_and_ttls,
+    set_short_link,
+)
 from app.use_cases.codes import generate_unique_code
 from app.use_cases.list_redirects import Redirect
 from app.use_cases.validation import validate_ttl, validate_url
@@ -37,6 +42,7 @@ def create_redirect(*, redis_client: redis.Redis, url: str, ttl: int | None) -> 
     code = generate_unique_code(redis_client)
     key = build_short_link_key(code)
     set_short_link(redis_client, key, url, ttl)
+    add_code_to_index(redis_client, code, ttl)
 
     ([_], [actual_ttl]) = get_key_values_and_ttls(redis_client, [key])
     logger.info("Created redirect %r", code)

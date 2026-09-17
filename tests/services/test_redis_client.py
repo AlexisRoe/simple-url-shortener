@@ -1,19 +1,26 @@
 """Tests for app.services.redis_client."""
 
+import time
 from unittest.mock import MagicMock
 
 import redis
 
 from app.core.config import Settings
+from app.core.constants import SHORT_CODE_INDEX_KEY
 from app.services.redis_client import (
+    add_code_to_index,
     build_redis_client,
     build_short_link_key,
     check_redis_connection,
     delete_key,
     delete_keys,
+    get_index_count,
+    get_index_page,
     get_key_values_and_ttls,
     get_short_link_urls,
     key_exists,
+    purge_expired_index_entries,
+    remove_code_from_index,
     scan_keys_for_code,
     scan_short_link_keys,
     set_short_link,
@@ -174,3 +181,59 @@ def test_scan_keys_for_code_uses_code_prefixed_pattern():
 
     assert keys == ["sh:abc0000000", "sh:abc0000000:ab"]
     client.scan_iter.assert_called_once_with(match="sh:abc0000000*")
+
+
+def test_add_code_to_index_scores_by_future_expiry_when_ttl_given():
+    client = MagicMock()
+
+    add_code_to_index(client, "abc0000000", 60_000)
+
+    client.zadd.assert_called_once()
+    args, _ = client.zadd.call_args
+    assert args[0] == SHORT_CODE_INDEX_KEY
+    score = args[1]["abc0000000"]
+    assert score > time.time() * 1000
+
+
+def test_add_code_to_index_scores_as_infinite_when_no_ttl():
+    client = MagicMock()
+
+    add_code_to_index(client, "abc0000000", None)
+
+    client.zadd.assert_called_once_with(SHORT_CODE_INDEX_KEY, {"abc0000000": float("inf")})
+
+
+def test_remove_code_from_index():
+    client = MagicMock()
+
+    remove_code_from_index(client, "abc0000000")
+
+    client.zrem.assert_called_once_with(SHORT_CODE_INDEX_KEY, "abc0000000")
+
+
+def test_purge_expired_index_entries():
+    client = MagicMock()
+    client.zremrangebyscore.return_value = 3
+
+    removed = purge_expired_index_entries(client, 1000.0)
+
+    assert removed == 3
+    client.zremrangebyscore.assert_called_once_with(SHORT_CODE_INDEX_KEY, "-inf", 1000.0)
+
+
+def test_get_index_count():
+    client = MagicMock()
+    client.zcount.return_value = 5
+
+    assert get_index_count(client, 1000.0) == 5
+    client.zcount.assert_called_once_with(SHORT_CODE_INDEX_KEY, 1000.0, "+inf")
+
+
+def test_get_index_page():
+    client = MagicMock()
+    client.zrangebyscore.return_value = ["abc0000000", "def0000000"]
+
+    codes = get_index_page(client, 1000.0, offset=10, limit=20)
+
+    assert codes == ["abc0000000", "def0000000"]
+    client.zrangebyscore.assert_called_once_with(SHORT_CODE_INDEX_KEY, 1000.0, "+inf", start=10, num=20)

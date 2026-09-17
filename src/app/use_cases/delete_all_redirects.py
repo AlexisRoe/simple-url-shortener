@@ -6,7 +6,13 @@ import redis
 
 from app.core.errors import RedirectNotFoundError
 from app.core.logging import get_logger
-from app.services.redis_client import build_short_link_key, delete_keys, key_exists, scan_keys_for_code
+from app.services.redis_client import (
+    build_short_link_key,
+    delete_keys,
+    key_exists,
+    remove_code_from_index,
+    scan_keys_for_code,
+)
 
 logger = get_logger("delete_all_redirects")
 
@@ -27,4 +33,5 @@ def delete_all_redirects(*, redis_client: redis.Redis, code: str) -> None:
 
     keys = scan_keys_for_code(redis_client, code)
     delete_keys(redis_client, keys)
+    remove_code_from_index(redis_client, code)
     logger.info("Deleted code %r and %d variant(s)", code, len(keys) - 1)

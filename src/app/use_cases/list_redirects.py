@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 import redis
 
 from app.core.constants import SHORT_CODE_KEY_PREFIX
 from app.core.logging import get_logger
-from app.services.redis_client import get_key_values_and_ttls, scan_short_link_keys
+from app.services.redis_client import (
+    get_index_count,
+    get_index_page,
+    get_key_values_and_ttls,
+    purge_expired_index_entries,
+    scan_keys_for_code,
+)
 
 logger = get_logger("list_redirects")
 
@@ -81,34 +88,40 @@ def group_redirects_by_code(
 
 
 def list_redirects(*, redis_client: redis.Redis, page: int, page_size: int) -> RedirectPage:
-    """List all short-link redirects, grouped by code, with pagination.
+    """List short-link redirects, grouped by code, with pagination.
 
-    Every ``sh:*`` key is scanned and grouped by short code: the base key
-    (``sh:<code>``) holds a redirect's primary URL, and any
-    ``sh:<code>:<variant>`` keys hold its variant URLs. Each URL's TTL is
-    reported as stored in Redis (``-1`` if the key has no expiry).
+    Codes are paginated via a secondary ZSET index (``sh:index``) of base
+    codes, scored by expiry timestamp, so this only touches the keyspace
+    for the codes on the requested page rather than scanning every ``sh:*``
+    key. Only the page's codes are then scanned (base + variant keys) and
+    grouped: the base key (``sh:<code>``) holds a redirect's primary URL,
+    and any ``sh:<code>:<variant>`` keys hold its variant URLs. Each URL's
+    TTL is reported as stored in Redis (``-1`` if the key has no expiry).
 
-    Pagination is applied in-memory over the codes sorted alphabetically,
-    since Redis has no native way to page over grouped keys.
+    Results are ordered by the index's score (soonest-expiring codes
+    first, permanent codes last), not alphabetically.
 
     Args:
-        redis_client: Client used to scan and fetch stored redirects.
+        redis_client: Client used to read the index and fetch stored
+            redirects.
         page: The 1-indexed page number to return.
         page_size: The maximum number of redirects per page.
 
     Returns:
         The requested page of redirects, plus the total redirect count.
     """
-    keys = scan_short_link_keys(redis_client)
+    now_ms = time.time() * 1000
+    purge_expired_index_entries(redis_client, now_ms)
+
+    total = get_index_count(redis_client, now_ms)
+    offset = (page - 1) * page_size
+    page_codes = get_index_page(redis_client, now_ms, offset, page_size)
+
+    keys = [key for code in page_codes for key in scan_keys_for_code(redis_client, code)]
     values, ttls = get_key_values_and_ttls(redis_client, keys)
     redirects = group_redirects_by_code(keys, values, ttls)
 
-    codes = sorted(redirects)
-    total = len(codes)
-
-    start = (page - 1) * page_size
-    page_codes = codes[start : start + page_size]
-    items = [redirects[code] for code in page_codes]
+    items = [redirects[code] for code in page_codes if code in redirects]
 
     logger.info(
         "Listed %d redirect(s) (page=%d, page_size=%d, total=%d)",

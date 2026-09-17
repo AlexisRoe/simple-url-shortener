@@ -1,0 +1,86 @@
+name: Sync PR Version from Main
+
+on:
+  pull_request:
+    types: [labeled, unlabeled]
+
+jobs:
+  update-version:
+    # Only run for version labels to avoid unnecessary executions
+    if: |
+      contains(github.event.pull_request.labels.*.name, 'version:major') ||
+      contains(github.event.pull_request.labels.*.name, 'version:minor') ||
+      contains(github.event.pull_request.labels.*.name, 'version:patch') ||
+      github.event.action == 'unlabeled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+      - name: Fetch main branch
+        run: git fetch origin main:main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Recalculate version relative to main
+        env:
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
+        run: |
+          python3 -c "
+          import json, os, tomllib, re, subprocess
+
+          # 1. Read base version directly from main
+          main_toml = subprocess.check_output(['git', 'show', 'main:pyproject.toml']).decode()
+          main_data = tomllib.loads(main_toml)
+          main_ver = main_data.get('project', {}).get('version') or main_data.get('tool', {}).get('poetry', {}).get('version')
+          major, minor, patch = map(int, main_ver.split('.'))
+
+          # 2. Extract current labels from the PR event (passed via env, not
+          # spliced into this script, so label content can't break parsing)
+          labels = [l['name'] for l in json.loads(os.environ['PR_LABELS_JSON'])]
+
+          # 3. Deterministically bump or revert
+          if 'version:major' in labels:
+              target_ver = f'{major + 1}.0.0'
+          elif 'version:minor' in labels:
+              target_ver = f'{major}.{minor + 1}.0'
+          elif 'version:patch' in labels:
+              target_ver = f'{major}.{minor}.{patch + 1}'
+          else:
+              # Revert to main's version if all version labels were removed
+              target_ver = main_ver
+
+          # 4. Update local pyproject.toml
+          with open('pyproject.toml', 'r') as f:
+              content = f.read()
+
+          new_content = re.sub(r'version\s*=\s*\"[^\"]+\"', f'version = \"{target_ver}\"', content, count=1)
+
+          with open('pyproject.toml', 'w') as f:
+              f.write(new_content)
+
+          print(f'Version set to: {target_ver}')
+          "
+
+      - name: Commit and push changes if modified
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [[ -n $(git status --porcelain pyproject.toml) ]]; then
+            git add pyproject.toml
+            git commit -m "chore(version): sync version in pyproject.toml [skip ci]"
+            git push
+          else
+            echo "No version changes required."
+          fi

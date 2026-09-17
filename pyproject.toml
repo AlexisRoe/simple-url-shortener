@@ -1,6 +1,6 @@
 [project]
 name = "simple-url-shortener"
-version = "1.0.0"
+version = "1.1.0"
 description = "a simple url-shortener using Python and Redis"
 requires-python = ">=3.12"
 dependencies = [
