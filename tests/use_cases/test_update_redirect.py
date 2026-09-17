@@ -28,6 +28,7 @@ def test_update_redirect_updates_base_entry():
     assert result.variant is None
     assert result.url == "https://example.com/new"
     client.set.assert_called_once()
+    client.zadd.assert_called_once()
 
 
 def test_update_redirect_updates_variant_entry():
@@ -38,6 +39,7 @@ def test_update_redirect_updates_variant_entry():
     )
 
     assert result.variant == "ab"
+    client.zadd.assert_not_called()
 
 
 def test_update_redirect_raises_when_entry_missing():

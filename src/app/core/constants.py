@@ -5,6 +5,11 @@ from __future__ import annotations
 # Prefix for every short-link Redis key, e.g. "sh:<code>" or "sh:<code>:<variant>".
 SHORT_CODE_KEY_PREFIX = "sh"
 
+# ZSET tracking every base short code (never variants), scored by expiry
+# timestamp in ms (or +inf for codes with no TTL). Used to paginate listings
+# without scanning the whole keyspace.
+SHORT_CODE_INDEX_KEY = "sh:index"
+
 # Length, in characters, of a generated short code.
 CODE_LENGTH = 10
 # Maximum length, in characters, of a variant string.

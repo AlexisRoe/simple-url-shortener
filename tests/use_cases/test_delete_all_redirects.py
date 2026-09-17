@@ -16,6 +16,7 @@ def test_delete_all_redirects_deletes_base_and_variant_keys():
     delete_all_redirects(redis_client=client, code="aB3dE5gH7j")
 
     client.delete.assert_called_once_with("sh:aB3dE5gH7j", "sh:aB3dE5gH7j:ab", "sh:aB3dE5gH7j:cd")
+    client.zrem.assert_called_once_with("sh:index", "aB3dE5gH7j")
 
 
 def test_delete_all_redirects_raises_when_code_missing():

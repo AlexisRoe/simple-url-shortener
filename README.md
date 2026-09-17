@@ -225,15 +225,20 @@ them if you need to go further:
   `remote.host`, so it's straightforward to spread requests across many
   source IPs (or hide behind a shared NAT/proxy IP and get throttled as a
   group). It stops naive abuse, not a determined or distributed attacker.
-- **`GET /api` (list redirects) is O(n) over all keys.** It scans every
-  `sh:*` key in Redis on each call before paginating in memory, since
-  Redis has no native way to page over grouped keys. Fine at hundreds or
-  low thousands of codes; if you get into the hundreds of thousands, this
-  will get slow and should be replaced with a secondary index (e.g. a
-  Redis `ZSET`/sorted set of codes maintained on create/delete) instead
-  of a `SCAN`. (Note: this only affects the *listing* endpoint — resolving
-  a single short code via `GET /sh/{code}` is a direct O(1) key lookup and
-  is unaffected.)
+- **`GET /api` (list redirects) pages via a secondary index, not a full
+  scan.** A `sh:index` ZSET tracks every base code, scored by expiry
+  timestamp (`+inf` for codes with no TTL), maintained on
+  create/update/delete. Listing reads only the requested page's codes from
+  the index, then scans just those codes' keys — it no longer touches the
+  full `sh:*` keyspace. As a result, results are ordered by expiry
+  (soonest-expiring first, permanent codes last) rather than
+  alphabetically. Expired index entries are purged inline on each listing
+  call rather than via a background task — sufficient at this app's
+  scale; see the note above `purge_expired_index_entries` in
+  `redis_client.py` for how to add a periodic sweep if that's ever needed.
+  (Note: this only affects the *listing* endpoint — resolving a single
+  short code via `GET /sh/{code}` is a direct O(1) key lookup and is
+  unaffected.)
 - **No metrics or tracing.** There's no Prometheus `/metrics` endpoint or
   OpenTelemetry spans — only structured logs with a per-request duration.
   Deemed overkill for the current scope; the request-logging middleware

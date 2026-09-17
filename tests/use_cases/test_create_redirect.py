@@ -30,6 +30,7 @@ def test_create_redirect_stores_url_and_returns_entry():
     args, kwargs = client.set.call_args
     assert args[1] == "https://example.com"
     assert "px" not in kwargs
+    client.zadd.assert_called_once()
 
 
 def test_create_redirect_passes_ttl_as_px():
