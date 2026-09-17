@@ -20,6 +20,7 @@ def _fake_redis(page_codes, keys_by_code, values, ttls):
     client.zremrangebyscore.return_value = 0
     client.zcount.return_value = len(page_codes)
     client.zrangebyscore.return_value = page_codes
+
     def _scan_iter(match):
         code = match.rsplit(":", 1)[-1].rstrip("*")
         return iter(keys_by_code.get(code, []))
