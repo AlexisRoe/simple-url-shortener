@@ -33,9 +33,11 @@ jobs:
           python-version: '3.11'
 
       - name: Recalculate version relative to main
+        env:
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
         run: |
           python3 -c "
-          import tomllib, re, subprocess
+          import json, os, tomllib, re, subprocess
 
           # 1. Read base version directly from main
           main_toml = subprocess.check_output(['git', 'show', 'main:pyproject.toml']).decode()
@@ -43,8 +45,9 @@ jobs:
           main_ver = main_data.get('project', {}).get('version') or main_data.get('tool', {}).get('poetry', {}).get('version')
           major, minor, patch = map(int, main_ver.split('.'))
 
-          # 2. Extract current labels from the PR event
-          labels = [l['name'] for l in ${{ toJson(github.event.pull_request.labels) }}]
+          # 2. Extract current labels from the PR event (passed via env, not
+          # spliced into this script, so label content can't break parsing)
+          labels = [l['name'] for l in json.loads(os.environ['PR_LABELS_JSON'])]
 
           # 3. Deterministically bump or revert
           if 'version:major' in labels:
