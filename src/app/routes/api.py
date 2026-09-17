@@ -30,7 +30,26 @@ from app.use_cases.update_redirect import update_redirect as update_redirect_use
 router = APIRouter(prefix="/api", tags=["redirect"])
 
 
-@router.get("", summary="List all redirects")
+@router.get(
+    "",
+    summary="List all redirects",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "items": [
+                            {"code": "abc123", "url": "https://example.com", "ttl": -1, "variants": []}
+                        ],
+                        "total": 1,
+                        "page": 1,
+                        "page_size": DEFAULT_PAGE_SIZE,
+                    }
+                }
+            }
+        }
+    },
+)
 def list_redirects(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
@@ -47,7 +66,23 @@ def list_redirects(
     return list_redirects_use_case(redis_client=get_redis_client(), page=page, page_size=page_size)
 
 
-@router.get("/whoami", summary="Describe the authenticated token")
+@router.get(
+    "/whoami",
+    summary="Describe the authenticated token",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "role": "read_write",
+                        "expires_at": "2026-09-18T12:00:00+00:00",
+                        "expires_in_seconds": 3600,
+                    }
+                }
+            }
+        }
+    },
+)
 def whoami(request: Request) -> WhoAmI:
     """Report the role and remaining validity of the request's bearer token.
 
@@ -70,7 +105,20 @@ def whoami(request: Request) -> WhoAmI:
     )
 
 
-@router.post("", summary="Create a redirect", status_code=201)
+@router.post(
+    "",
+    summary="Create a redirect",
+    status_code=201,
+    responses={
+        201: {
+            "content": {
+                "application/json": {
+                    "example": {"code": "abc123", "url": "https://example.com", "ttl": -1, "variants": []}
+                }
+            }
+        }
+    },
+)
 def create_redirect(body: CreateRedirectBody) -> Redirect:
     """Create a new shortened-URL redirect.
 
@@ -87,7 +135,25 @@ def create_redirect(body: CreateRedirectBody) -> Redirect:
     return create_redirect_use_case(redis_client=get_redis_client(), url=body.url, ttl=body.ttl)
 
 
-@router.post("/{code}/variants", summary="Create a variant for an existing redirect", status_code=201)
+@router.post(
+    "/{code}/variants",
+    summary="Create a variant for an existing redirect",
+    status_code=201,
+    responses={
+        201: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": "abc123",
+                        "variant": "promo",
+                        "url": "https://example.com/promo",
+                        "ttl": -1,
+                    }
+                }
+            }
+        }
+    },
+)
 def create_variant(code: str, body: CreateVariantBody) -> CreatedVariant:
     """Create a variant URL under an existing short code.
 
@@ -109,7 +175,19 @@ def create_variant(code: str, body: CreateVariantBody) -> CreatedVariant:
     )
 
 
-@router.get("/{code}", summary="Get a single redirect")
+@router.get(
+    "/{code}",
+    summary="Get a single redirect",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {"code": "abc123", "url": "https://example.com", "ttl": -1, "variants": []}
+                }
+            }
+        }
+    },
+)
 def get_redirect(code: str) -> Redirect:
     """Fetch a single redirect by its short code.
 
@@ -125,7 +203,19 @@ def get_redirect(code: str) -> Redirect:
     return get_redirect_use_case(redis_client=get_redis_client(), code=code)
 
 
-@router.patch("/{code}", summary="Update a single redirect")
+@router.patch(
+    "/{code}",
+    summary="Update a single redirect",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {"code": "abc123", "variant": None, "url": "https://example.com", "ttl": -1}
+                }
+            }
+        }
+    },
+)
 def update_redirect(code: str, body: UpdateRedirectBody) -> UpdatedRedirect:
     """Update a single redirect entry: a code, or a code+variant.
 
