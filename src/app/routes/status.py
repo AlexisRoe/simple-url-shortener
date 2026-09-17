@@ -36,6 +36,18 @@ class StatusResponse(BaseModel):
     status: str
     redis_connected: bool
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "name": "simple-url-shortener",
+                "version": "1.1.0",
+                "date": "2026-09-17T13:08:46.000000+00:00",
+                "status": "ok",
+                "redis_connected": True,
+            }
+        }
+    }
+
 
 class HealthResponse(BaseModel):
     """Response payload for the ``/health/*`` probe endpoints."""
@@ -43,7 +55,11 @@ class HealthResponse(BaseModel):
     status: str
 
 
-@router.get("/status", response_model=StatusResponse, summary="Application and dependency status")
+@router.get(
+    "/status",
+    response_model=StatusResponse,
+    summary="Application and dependency status",
+)
 def get_status(settings: Settings = Depends(get_settings)) -> StatusResponse:
     """Report the application's identity, current time, and dependency health.
 
@@ -65,7 +81,12 @@ def get_status(settings: Settings = Depends(get_settings)) -> StatusResponse:
     )
 
 
-@router.get("/health/livez", response_model=HealthResponse, summary="Liveness probe")
+@router.get(
+    "/health/livez",
+    response_model=HealthResponse,
+    summary="Liveness probe",
+    responses={200: {"content": {"application/json": {"example": {"status": "ok"}}}}},
+)
 def get_livez() -> HealthResponse:
     """Report whether the process is alive.
 
@@ -79,7 +100,15 @@ def get_livez() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-@router.get("/health/readyz", response_model=HealthResponse, summary="Readiness probe")
+@router.get(
+    "/health/readyz",
+    response_model=HealthResponse,
+    summary="Readiness probe",
+    responses={
+        200: {"content": {"application/json": {"example": {"status": "ok"}}}},
+        503: {"content": {"application/json": {"example": {"status": "unavailable"}}}},
+    },
+)
 def get_readyz(response: Response) -> HealthResponse:
     """Report whether this instance is ready to serve traffic.
 

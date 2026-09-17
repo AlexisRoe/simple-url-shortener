@@ -32,6 +32,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Recalculate version relative to main
         env:
           PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
@@ -72,14 +75,17 @@ jobs:
           print(f'Version set to: {target_ver}')
           "
 
+      - name: Sync uv.lock with the new project version
+        run: uv lock
+
       - name: Commit and push changes if modified
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [[ -n $(git status --porcelain pyproject.toml) ]]; then
-            git add pyproject.toml
-            git commit -m "chore(version): sync version in pyproject.toml [skip ci]"
+          if [[ -n $(git status --porcelain pyproject.toml uv.lock) ]]; then
+            git add pyproject.toml uv.lock
+            git commit -m "chore(version): sync version in pyproject.toml and uv.lock [skip ci]"
             git push
           else
             echo "No version changes required."
