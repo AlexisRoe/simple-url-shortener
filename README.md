@@ -1,5 +1,7 @@
 # simple-url-shortener
 
+[![CI](https://github.com/AlexisRoe/simple-url-shortener/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexisRoe/simple-url-shortener/actions/workflows/ci.yml)
+
 A small, self-hosted URL shortener written in Python (FastAPI) backed by
 Redis/Valkey, fronted by Caddy for TLS, rate limiting and security headers.
 
